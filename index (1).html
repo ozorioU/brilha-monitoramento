@@ -1,0 +1,1445 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Brilha Goiânia — Monitoramento</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0d16;--bg2:#0c101b;--bg3:#101525;--bg4:#161d2e;
+  --border:#1e2a3a;
+  --primary:#ca9d4a;--primary-dim:rgba(202,157,74,0.12);--primary-glow:rgba(202,157,74,0.4);
+  --accent:#fec463;--accent2:#9a6e31;
+  --green:#00e676;--red:#ff3d57;--yellow:#ffc400;--purple:#a78bfa;
+  --text:#e7e9ec;--text-dim:#8a94a8;--text-muted:#3d4d66;
+  --gold-grad:linear-gradient(135deg,#9a6e31,#fec463,#ca9d4a);
+  --gold-grad2:linear-gradient(90deg,#9a6e31,#fec463);
+  --sidebar:230px;--topbar:58px;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Roboto',sans-serif;font-size:14px;overflow:hidden;}
+.app{display:flex;height:100vh;}
+
+/* SIDEBAR */
+.sidebar{width:var(--sidebar);background:var(--bg2);border-right:1px solid rgba(202,157,74,.15);display:flex;flex-direction:column;flex-shrink:0;position:relative;z-index:200;}
+.sidebar::after{content:'';position:absolute;right:-1px;top:0;bottom:0;width:1px;background:linear-gradient(to bottom,transparent,var(--accent),transparent);opacity:.4;}
+.sb-logo{height:var(--topbar);padding:0 16px;border-bottom:1px solid rgba(202,157,74,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;background:rgba(202,157,74,.03);}
+.sb-nav{flex:1;padding:10px 0;overflow-y:auto;}
+.sb-sec{padding:8px 16px 4px;font-size:10px;color:var(--accent2);text-transform:uppercase;letter-spacing:2px;}
+.nav-item{display:flex;align-items:center;gap:9px;padding:10px 16px;cursor:pointer;transition:all .2s;color:var(--text-dim);border-left:3px solid transparent;font-size:13px;font-weight:400;letter-spacing:.2px;user-select:none;}
+.nav-item:hover{background:rgba(202,157,74,.07);color:var(--text);}
+.nav-item.active{background:rgba(202,157,74,.1);color:var(--accent);border-left-color:var(--accent);}
+.nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:10px;}
+.sb-user{padding:12px 16px;border-top:1px solid rgba(202,157,74,.15);display:flex;align-items:center;gap:10px;}
+.avatar{width:32px;height:32px;border-radius:50%;flex-shrink:0;background:var(--gold-grad);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;color:#0a0d16;}
+.uinfo{flex:1;min-width:0;}
+.uname{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.urole{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;}
+.icon-btn{background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;border-radius:4px;transition:color .2s;display:flex;}
+.icon-btn:hover{color:var(--red);}
+
+/* MAIN */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.topbar{background:var(--bg2);border-bottom:1px solid rgba(202,157,74,.2);height:var(--topbar);padding:0 22px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.topbar-title{font-family:'Roboto',sans-serif;font-weight:500;font-size:16px;letter-spacing:.5px;background:var(--gold-grad2);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.topbar-right{display:flex;align-items:center;gap:10px;}
+.view-toggle{display:flex;background:var(--bg3);border:1px solid rgba(202,157,74,.2);border-radius:6px;overflow:hidden;}
+.vt-btn{padding:5px 11px;border:none;cursor:pointer;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.8px;transition:all .2s;background:transparent;color:var(--text-muted);font-family:'Roboto',sans-serif;}
+.vt-btn.active{background:var(--gold-grad);color:#0a0d16;}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:500;transition:all .2s;font-family:'Roboto',sans-serif;text-transform:uppercase;letter-spacing:.8px;}
+.btn-primary{background:var(--gold-grad);color:#0a0d16;font-weight:700;}
+.btn-primary:hover{filter:brightness(1.1);box-shadow:0 4px 16px var(--primary-glow);}
+.btn-ghost{background:transparent;color:var(--text-dim);border:1px solid var(--border);}
+.btn-ghost:hover{background:var(--bg4);color:var(--text);border-color:var(--accent);}
+.btn-danger{background:rgba(255,61,87,.12);color:var(--red);border:1px solid rgba(255,61,87,.3);}
+.btn-success{background:rgba(0,230,118,.1);color:var(--green);border:1px solid rgba(0,230,118,.3);}
+.btn-sm{padding:5px 10px;font-size:11px;}
+.content{flex:1;overflow-y:auto;padding:22px;}
+.content::-webkit-scrollbar{width:5px;}
+.content::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+/* STATS */
+.stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:20px;}
+.stat-card{background:var(--bg3);border:1px solid rgba(202,157,74,.1);border-radius:10px;padding:16px;position:relative;overflow:hidden;transition:border-color .2s;}
+.stat-card:hover{border-color:var(--accent);}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.sc-blue::before{background:var(--gold-grad2);}
+.sc-green::before{background:linear-gradient(90deg,var(--green),#00ff9d);}
+.sc-red::before{background:linear-gradient(90deg,var(--red),#ff6b7a);}
+.sc-yellow::before{background:linear-gradient(90deg,var(--yellow),#ffe066);}
+.sc-accent::before{background:linear-gradient(90deg,var(--accent),var(--purple));}
+.sc-icon{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:10px;}
+.ic-blue{background:rgba(202,157,74,.15);}
+.ic-green{background:rgba(0,230,118,.1);}
+.ic-red{background:rgba(255,61,87,.1);}
+.ic-yellow{background:rgba(255,196,0,.1);}
+.ic-accent{background:rgba(254,196,99,.1);}
+.sc-val{font-family:'Roboto',sans-serif;font-size:28px;font-weight:300;line-height:1;}
+.sc-lbl{font-size:11px;color:var(--text-muted);margin-top:4px;text-transform:uppercase;letter-spacing:1px;}
+.sc-sub{font-size:11px;color:var(--text-dim);margin-top:5px;}
+
+/* CARDS */
+.card{background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:10px;overflow:hidden;margin-bottom:20px;}
+.card-header{padding:14px 18px;border-bottom:1px solid rgba(202,157,74,.15);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+.card-title{font-family:'Roboto',sans-serif;font-weight:500;font-size:14px;letter-spacing:.3px;display:flex;align-items:center;gap:8px;}
+.card-body{padding:18px;}
+
+/* MAP */
+.map-wrap{height:440px;position:relative;}
+#leaflet-map{height:100%;width:100%;background:#0d1928;}
+.map-legend{position:absolute;bottom:10px;right:10px;z-index:500;background:rgba(10,13,22,.94);border:1px solid rgba(202,157,74,.25);border-radius:8px;padding:10px 14px;backdrop-filter:blur(6px);}
+.ml-row{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:500;margin-bottom:3px;}
+.ml-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.map-info-bar{padding:10px 18px;border-top:1px solid rgba(202,157,74,.12);background:var(--bg3);display:flex;align-items:center;gap:14px;flex-wrap:wrap;min-height:44px;}
+.mib-item{font-size:12px;color:var(--text-dim);}
+
+/* Leaflet */
+.leaflet-tile-pane{filter:brightness(.78) saturate(.7) hue-rotate(5deg);}
+.leaflet-control-zoom{border:1px solid var(--border)!important;border-radius:8px!important;overflow:hidden;box-shadow:none!important;}
+.leaflet-control-zoom a{background:rgba(10,13,22,.9)!important;color:var(--text)!important;border-color:var(--border)!important;width:28px!important;height:28px!important;line-height:28px!important;}
+.leaflet-popup-content-wrapper{background:var(--bg2)!important;border:1px solid rgba(202,157,74,.25)!important;border-radius:10px!important;color:var(--text)!important;padding:0!important;box-shadow:0 8px 32px rgba(0,0,0,.6)!important;}
+.leaflet-popup-tip,.leaflet-popup-tip-container{display:none!important;}
+.leaflet-popup-content{margin:0!important;min-width:220px!important;}
+.leaflet-popup-close-button{color:var(--text-muted)!important;top:10px!important;right:10px!important;}
+.pop-inner{padding:14px 16px;}
+.pop-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.pop-name{font-weight:500;font-size:14px;letter-spacing:.2px;}
+.pop-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;text-transform:uppercase;}
+.pop-on{background:rgba(0,230,118,.15);color:var(--green);}
+.pop-off{background:rgba(255,61,87,.15);color:var(--red);}
+.pop-addr{font-size:12px;color:var(--text-dim);margin-bottom:6px;line-height:1.4;}
+.pop-row{display:flex;gap:6px;font-size:11px;color:var(--text-muted);margin-top:3px;}
+.pop-row strong{color:var(--text-dim);min-width:52px;}
+.pop-row span{font-family:monospace;color:var(--accent);}
+.pop-foot{padding:8px 16px;border-top:1px solid var(--border);background:var(--bg3);display:flex;flex-direction:column;gap:6px;}
+.pop-btn-row{display:flex;gap:6px;}
+.pop-btn{flex:1;padding:7px;border-radius:6px;border:none;cursor:pointer;font-size:11px;font-weight:500;font-family:'Roboto',sans-serif;text-transform:uppercase;transition:all .2s;letter-spacing:.5px;}
+.pop-btn-primary{background:var(--gold-grad);color:#0a0d16;font-weight:700;}
+.pop-btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text-dim);}
+.pop-btn-ghost:hover{border-color:var(--accent);color:var(--accent);}
+
+/* CAM GRID */
+.cam-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;}
+.cam-card{background:var(--bg3);border:1px solid rgba(202,157,74,.1);border-radius:10px;padding:14px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden;}
+.cam-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 6px 20px rgba(202,157,74,.12);}
+.cam-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.cam-card.online::before{background:var(--green);}
+.cam-card.offline::before{background:var(--red);}
+.cc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;}
+.cc-name{font-weight:500;font-size:13px;}
+.cc-status{font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;text-transform:uppercase;}
+.cc-online{background:rgba(0,230,118,.12);color:var(--green);}
+.cc-offline{background:rgba(255,61,87,.12);color:var(--red);}
+.cc-addr{font-size:12px;color:var(--text-dim);margin-bottom:5px;}
+.cc-meta{font-size:11px;color:var(--text-muted);display:flex;justify-content:space-between;}
+.cc-ip{font-family:monospace;color:var(--accent);font-size:11px;}
+
+/* TICKETS */
+.tk-list{display:flex;flex-direction:column;gap:10px;}
+.tk-card{background:var(--bg3);border:1px solid rgba(202,157,74,.1);border-radius:10px;padding:14px;cursor:pointer;transition:all .2s;}
+.tk-card:hover{border-color:var(--accent);}
+.tk-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;}
+.tk-id{font-size:11px;color:var(--accent);font-family:monospace;font-weight:600;margin-bottom:2px;}
+.tk-title{font-size:14px;font-weight:500;letter-spacing:.2px;}
+.tk-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;text-transform:uppercase;white-space:nowrap;}
+.tk-meta{font-size:11px;color:var(--text-muted);display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+.tk-desc{font-size:12px;color:var(--text-muted);margin-top:5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.tk-priority{font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;text-transform:uppercase;}
+.p-alta{background:rgba(255,61,87,.12);color:var(--red);}
+.p-media{background:rgba(255,196,0,.1);color:var(--yellow);}
+.p-baixa{background:rgba(0,230,118,.1);color:var(--green);}
+.badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;}
+.s-aberto{background:rgba(255,196,0,.1);color:var(--yellow);}
+.s-reconhecido{background:rgba(0,200,255,.1);color:#00c8ff;}
+.s-tecnico{background:rgba(0,102,255,.12);color:#0066ff;}
+.s-agendado{background:rgba(167,139,250,.12);color:var(--purple);}
+.s-andamento{background:rgba(255,196,0,.1);color:var(--yellow);}
+.s-finalizado{background:rgba(0,230,118,.1);color:var(--green);}
+
+/* FORM */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.fg-full{grid-column:1/-1;}
+.f-group{display:flex;flex-direction:column;gap:5px;}
+.f-label{font-size:11px;font-weight:500;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;}
+.f-input,.f-select,.f-textarea{background:var(--bg4);border:1px solid var(--border);color:var(--text);padding:9px 11px;border-radius:6px;font-size:13px;font-family:'Roboto',sans-serif;outline:none;width:100%;transition:border-color .2s;}
+.f-input:focus,.f-select:focus,.f-textarea:focus{border-color:var(--accent);}
+.f-input:disabled{opacity:.6;}
+.f-textarea{resize:vertical;min-height:80px;}
+.sep{height:1px;background:var(--border);margin:14px 0;}
+.info-row{display:flex;gap:6px;font-size:12px;color:var(--text-dim);padding:3px 0;align-items:flex-start;}
+.info-row strong{color:var(--text);min-width:110px;font-size:11px;flex-shrink:0;}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);}
+.modal{background:var(--bg2);border:1px solid rgba(202,157,74,.2);border-radius:12px;width:100%;max-width:740px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 64px rgba(0,0,0,.6);}
+.modal::-webkit-scrollbar{width:4px;}
+.modal::-webkit-scrollbar-thumb{background:var(--border);}
+.modal-head{padding:18px 22px;border-bottom:1px solid rgba(202,157,74,.2);display:flex;align-items:center;justify-content:space-between;}
+.modal-title{font-family:'Roboto',sans-serif;font-weight:500;font-size:16px;letter-spacing:.3px;}
+.modal-body{padding:22px;}
+.modal-foot{padding:14px 22px;border-top:1px solid rgba(202,157,74,.15);display:flex;justify-content:flex-end;gap:8px;}
+
+/* TIMELINE */
+.timeline{position:relative;padding-left:22px;}
+.timeline::before{content:'';position:absolute;left:5px;top:0;bottom:0;width:1px;background:var(--border);}
+.tl-item{position:relative;margin-bottom:18px;}
+.tl-dot{position:absolute;left:-18px;top:3px;width:10px;height:10px;border-radius:50%;border:2px solid var(--bg2);}
+.tl-done{background:var(--green);}
+.tl-curr{background:var(--yellow);box-shadow:0 0 8px var(--yellow);}
+.tl-pend{background:var(--border);}
+.tl-status{font-size:10px;font-weight:500;color:var(--accent);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;}
+.tl-note{font-size:13px;color:var(--text);margin-bottom:3px;}
+.tl-meta{font-size:11px;color:var(--text-muted);}
+.tl-dur{font-size:10px;color:var(--yellow);background:rgba(255,196,0,.08);padding:2px 7px;border-radius:4px;display:inline-block;margin-top:4px;}
+
+/* USERS */
+.users-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;}
+.user-card{background:var(--bg3);border:1px solid rgba(202,157,74,.1);border-radius:10px;padding:16px;}
+
+/* LOGIN */
+.login-page{height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);}
+.login-card{background:var(--bg2);border:1px solid rgba(202,157,74,.25);border-radius:14px;padding:38px;width:420px;box-shadow:0 32px 64px rgba(0,0,0,.6);}
+.login-logo{text-align:center;margin-bottom:16px;}
+.login-logo img{height:50px;object-fit:contain;}
+.login-sub{font-size:11px;color:var(--accent2);letter-spacing:3px;text-transform:uppercase;text-align:center;margin-bottom:26px;font-weight:500;}
+.login-err{background:rgba(255,61,87,.1);border:1px solid rgba(255,61,87,.3);border-radius:6px;padding:9px 13px;color:var(--red);font-size:13px;margin-bottom:14px;}
+.demo-sec{margin-top:20px;padding-top:20px;border-top:1px solid var(--border);}
+.demo-lbl{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;}
+.demo-btn{display:block;width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:8px 12px;cursor:pointer;transition:all .2s;color:var(--text);font-family:'Roboto',sans-serif;margin-bottom:6px;text-align:left;}
+.demo-btn:hover{border-color:var(--accent);background:var(--primary-dim);}
+.demo-cred{font-size:11px;color:var(--text-muted);font-family:monospace;}
+
+/* MISC */
+.upload-zone{border:2px dashed var(--border);border-radius:8px;padding:20px;text-align:center;cursor:pointer;transition:all .2s;color:var(--text-muted);}
+.upload-zone:hover{border-color:var(--accent);color:var(--text);background:var(--primary-dim);}
+.img-previews{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.img-thumb{width:72px;height:54px;border-radius:6px;object-fit:cover;border:1px solid var(--border);cursor:pointer;}
+.empty{text-align:center;padding:48px 0;color:var(--text-muted);}
+.tag-strip{display:flex;gap:6px;flex-wrap:wrap;}
+
+/* LOADING OVERLAY */
+.loading-overlay{position:fixed;inset:0;background:rgba(10,13,22,.9);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
+.loading-overlay img{height:50px;object-fit:contain;}
+.loading-spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.pulse{animation:pulse 1.5s infinite;}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(60px);background:var(--bg2);border:1px solid rgba(202,157,74,.3);border-radius:8px;padding:10px 20px;font-size:13px;color:var(--text);z-index:9999;transition:transform .3s;box-shadow:0 8px 24px rgba(0,0,0,.4);}
+.toast.show{transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="loading-overlay" class="loading-overlay">
+  <img src="data:image/png;base64,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" alt="Brilha"/>
+  <div class="loading-spinner"></div>
+  <div style="font-size:12px;color:var(--text-muted);letter-spacing:2px;text-transform:uppercase">Carregando...</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ── CONFIG ───────────────────────────────────────────────────────────────────
+const SB_URL = 'https://lddprbkfrqmrvspcstsm.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxkZHByYmtmcnFtcnZzcGNzdHNtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3OTg1NTM3OSwiZXhwIjoyMDk1NDMxMzc5fQ.DwCsAkBoF8q76d5w5_98EN3Nkv-J2MS-EJK_OyGz75g';
+const SB_HEADERS = {
+  'apikey': SB_KEY,
+  'Authorization': 'Bearer ' + SB_KEY,
+  'Content-Type': 'application/json',
+  'Prefer': 'return=representation'
+};
+
+// ── SUPABASE API ──────────────────────────────────────────────────────────────
+async function sbGet(table, query=''){
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?${query}`, {headers: SB_HEADERS});
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function sbPost(table, body){
+  const r = await fetch(`${SB_URL}/rest/v1/${table}`, {method:'POST', headers: SB_HEADERS, body: JSON.stringify(body)});
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function sbPatch(table, query, body){
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?${query}`, {method:'PATCH', headers: SB_HEADERS, body: JSON.stringify(body)});
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function sbDelete(table, query){
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?${query}`, {method:'DELETE', headers: SB_HEADERS});
+  if(!r.ok) throw new Error(await r.text());
+  return true;
+}
+
+// ── LOCAL CAMERA DATA (from KMZ - read-only reference) ───────────────────────
+const KMZ_CAMERAS = [{id:1,name:"CAM-001",address:"SET CRIMEIA OESTE",lat:-16.658458,lng:-49.261586,status:"offline",ip:"192.168.1.1",model:"Intelbras/Hikvision"},
+{id:2,name:"CAM-002",address:"SET CENTRAL",lat:-16.645342,lng:-49.266619,status:"online",ip:"192.168.1.2",model:"Intelbras/Hikvision"},
+{id:3,name:"CAM-003",address:"SET CENTRAL",lat:-16.653817,lng:-49.263325,status:"offline",ip:"192.168.1.3",model:"Intelbras/Hikvision"},
+{id:4,name:"CAM-004",address:"SET CENTRAL",lat:-16.649078,lng:-49.264503,status:"offline",ip:"192.168.1.4",model:"Intelbras/Hikvision"},
+{id:5,name:"CAM-005",address:"SET URIAS MAGALHAES",lat:-16.637533,lng:-49.272561,status:"online",ip:"192.168.1.5",model:"Intelbras/Hikvision"},
+{id:6,name:"CAM-006",address:"SET URIAS MAGALHAES",lat:-16.640667,lng:-49.269119,status:"online",ip:"192.168.1.6",model:"Intelbras/Hikvision"},
+{id:7,name:"CAM-007",address:"SET URIAS MAGALHAES",lat:-16.639519,lng:-49.271136,status:"online",ip:"192.168.1.7",model:"Intelbras/Hikvision"},
+{id:8,name:"CAM-008",address:"SET URIAS MAGALHAES",lat:-16.62355,lng:-49.279468,status:"online",ip:"192.168.1.8",model:"Intelbras/Hikvision"},
+{id:9,name:"CAM-009",address:"CH RIO BRANCO",lat:-16.624392,lng:-49.284111,status:"online",ip:"192.168.1.9",model:"Intelbras/Hikvision"},
+{id:10,name:"CAM-010",address:"CH RIO BRANCO",lat:-16.623114,lng:-49.2864,status:"online",ip:"192.168.1.10",model:"Intelbras/Hikvision"},
+{id:11,name:"CAM-011",address:"CH RIO BRANCO",lat:-16.619708,lng:-49.290981,status:"online",ip:"192.168.1.11",model:"Intelbras/Hikvision"},
+{id:12,name:"CAM-012",address:"JD BALNEARIO MEIA PONTE",lat:-16.616809,lng:-49.297523,status:"online",ip:"192.168.1.12",model:"Intelbras/Hikvision"},
+{id:13,name:"CAM-013",address:"RES BARRAVENTO",lat:-16.620731,lng:-49.306614,status:"offline",ip:"192.168.1.13",model:"Intelbras/Hikvision"},
+{id:14,name:"CAM-014",address:"SET MORADA DO SOL",lat:-16.609292,lng:-49.314322,status:"offline",ip:"192.168.1.14",model:"Intelbras/Hikvision"},
+{id:15,name:"CAM-015",address:"SET MORADA DO SOL",lat:-16.607572,lng:-49.317094,status:"offline",ip:"192.168.1.15",model:"Intelbras/Hikvision"},
+{id:16,name:"CAM-016",address:"JD BALNEARIO MEIA PONTE",lat:-16.620486,lng:-49.303894,status:"offline",ip:"192.168.1.16",model:"Intelbras/Hikvision"},
+{id:17,name:"CAM-017",address:"SET ALTO DO VALE",lat:-16.61595,lng:-49.310339,status:"offline",ip:"192.168.1.17",model:"Intelbras/Hikvision"},
+{id:18,name:"CAM-018",address:"SET ALTO DO VALE",lat:-16.618094,lng:-49.308236,status:"offline",ip:"192.168.1.18",model:"Intelbras/Hikvision"},
+{id:19,name:"CAM-019",address:"SET SUL",lat:-16.688408,lng:-49.253919,status:"online",ip:"192.168.1.19",model:"Intelbras/Hikvision"},
+{id:20,name:"CAM-020",address:"SET SUL",lat:-16.6864402,lng:-49.2544181,status:"online",ip:"192.168.1.20",model:"Intelbras/Hikvision"},
+{id:21,name:"CAM-021",address:"SET SUL",lat:-16.6846419,lng:-49.254983,status:"online",ip:"192.168.1.21",model:"Intelbras/Hikvision"},
+{id:22,name:"CAM-022",address:"SET MARISTA",lat:-16.712194,lng:-49.253458,status:"offline",ip:"192.168.1.22",model:"Intelbras/Hikvision"},
+{id:23,name:"CAM-023",address:"SET MARISTA",lat:-16.697169,lng:-49.252286,status:"offline",ip:"192.168.1.23",model:"Intelbras/Hikvision"},
+{id:24,name:"CAM-024",address:"SET PEDRO LUDOVICO",lat:-16.710342,lng:-49.254189,status:"offline",ip:"192.168.1.24",model:"Intelbras/Hikvision"},
+{id:25,name:"CAM-025",address:"SET MARISTA",lat:-16.702534,lng:-49.252792,status:"offline",ip:"192.168.1.25",model:"Intelbras/Hikvision"},
+{id:26,name:"CAM-026",address:"SET PEDRO LUDOVICO",lat:-16.704569,lng:-49.252958,status:"offline",ip:"192.168.1.26",model:"Intelbras/Hikvision"},
+{id:27,name:"CAM-027",address:"SET CENTRAL",lat:-16.679267,lng:-49.25679,status:"online",ip:"192.168.1.27",model:"Intelbras/Hikvision"},
+{id:28,name:"CAM-028",address:"SET CENTRAL",lat:-16.678664,lng:-49.256939,status:"offline",ip:"192.168.1.28",model:"Intelbras/Hikvision"},
+{id:29,name:"CAM-029",address:"SET CENTRAL",lat:-16.677308,lng:-49.257356,status:"online",ip:"192.168.1.29",model:"Intelbras/Hikvision"},
+{id:30,name:"CAM-030",address:"SET MARECHAL RONDON",lat:-16.628936,lng:-49.273556,status:"online",ip:"192.168.1.30",model:"Intelbras/Hikvision"},
+{id:31,name:"CAM-031",address:"SET CENTRAL",lat:-16.6814741,lng:-49.2545938,status:"online",ip:"192.168.1.31",model:"Intelbras/Hikvision"},
+{id:32,name:"CAM-032",address:"SET CENTRAL",lat:-16.682481,lng:-49.255753,status:"offline",ip:"192.168.1.32",model:"Intelbras/Hikvision"},
+{id:33,name:"CAM-033",address:"SET CENTRAL",lat:-16.674911,lng:-49.258142,status:"offline",ip:"192.168.1.33",model:"Intelbras/Hikvision"},
+{id:34,name:"CAM-034",address:"SET CENTRAL",lat:-16.673761,lng:-49.258497,status:"offline",ip:"192.168.1.34",model:"Intelbras/Hikvision"},
+{id:35,name:"CAM-035",address:"SET CENTRAL",lat:-16.672372,lng:-49.258911,status:"offline",ip:"192.168.1.35",model:"Intelbras/Hikvision"},
+{id:36,name:"CAM-036",address:"SET CENTRAL",lat:-16.670827,lng:-49.259372,status:"offline",ip:"192.168.1.36",model:"Intelbras/Hikvision"},
+{id:37,name:"CAM-037",address:"SET CENTRAL",lat:-16.6686206,lng:-49.2602473,status:"online",ip:"192.168.1.37",model:"Intelbras/Hikvision"},
+{id:38,name:"CAM-038",address:"SET CENTRAL",lat:-16.664314,lng:-49.261472,status:"offline",ip:"192.168.1.38",model:"Intelbras/Hikvision"},
+{id:39,name:"CAM-039",address:"AV.GOIAS BRT",lat:-16.661313,lng:-49.261863,status:"online",ip:"192.168.1.39",model:"Intelbras/Hikvision"},
+{id:40,name:"CAM-040",address:"AV.GOIAS BRT",lat:-16.661313,lng:-49.261863,status:"offline",ip:"192.168.1.40",model:"Intelbras/Hikvision"},
+{id:41,name:"CAM-041",address:"BRT-SET ALTO DO VALE",lat:-16.610711,lng:-49.312628,status:"offline",ip:"192.168.1.41",model:"Intelbras/Hikvision"},
+{id:42,name:"CAM-042",address:"SET NORTE FERROVIARIO",lat:-16.661097,lng:-49.260675,status:"online",ip:"192.168.1.42",model:"Intelbras/Hikvision"},
+{id:43,name:"CAM-043",address:"SET URIAS MAGALHAES",lat:-16.630701,lng:-49.273302,status:"offline",ip:"192.168.1.43",model:"Intelbras/Hikvision"},
+{id:44,name:"CAM-044",address:"SET URIAS MAGALHAES",lat:-16.630701,lng:-49.273302,status:"offline",ip:"192.168.1.44",model:"Intelbras/Hikvision"},
+{id:45,name:"CAM-045",address:"SET URIAS MAGALHAES",lat:-16.630701,lng:-49.273302,status:"offline",ip:"192.168.1.45",model:"Intelbras/Hikvision"},
+{id:46,name:"CAM-046",address:"SET URIAS MAGALHAES",lat:-16.630701,lng:-49.273302,status:"offline",ip:"192.168.1.46",model:"Intelbras/Hikvision"},
+{id:47,name:"CAM-047",address:"SET URIAS MAGALHAES",lat:-16.630701,lng:-49.273302,status:"offline",ip:"192.168.1.47",model:"Intelbras/Hikvision"},
+{id:48,name:"CAM-048",address:"SET URIAS MAGALHAES",lat:-16.630701,lng:-49.273302,status:"offline",ip:"192.168.1.48",model:"Intelbras/Hikvision"},
+{id:49,name:"CAM-049",address:"SET URIAS MAGALHAES",lat:-16.630701,lng:-49.273302,status:"offline",ip:"192.168.1.49",model:"Intelbras/Hikvision"},
+{id:50,name:"CAM-051",address:"SET URIAS MAGALHAES",lat:-16.630701,lng:-49.273302,status:"offline",ip:"192.168.1.50",model:"Intelbras/Hikvision"},
+{id:51,name:"CAM-052",address:"SET URIAS MAGALHAES",lat:-16.630701,lng:-49.273302,status:"offline",ip:"192.168.1.51",model:"Intelbras/Hikvision"},
+{id:52,name:"CAM-053",address:"SET URIAS MAGALHAES",lat:-16.630701,lng:-49.273302,status:"offline",ip:"192.168.1.52",model:"Intelbras/Hikvision"},
+{id:53,name:"CAM-054",address:"SET URIAS MAGALHAES",lat:-16.630701,lng:-49.273302,status:"offline",ip:"192.168.1.53",model:"Intelbras/Hikvision"},
+{id:54,name:"CAM-055",address:"RUA 96 ST-SUL",lat:-16.681142,lng:-49.253634,status:"offline",ip:"192.168.1.54",model:"Intelbras/Hikvision"},
+{id:55,name:"CAM-056",address:"RES ELDORADO",lat:-16.709436,lng:-49.31825,status:"offline",ip:"192.168.1.55",model:"Intelbras/Hikvision"},
+{id:56,name:"CAM-057",address:"SET PEDRO LUDOVICO",lat:-16.710342,lng:-49.254189,status:"offline",ip:"192.168.1.56",model:"Intelbras/Hikvision"},
+{id:57,name:"CAM-058",address:"JD PLANALTO",lat:-16.711678,lng:-49.314928,status:"offline",ip:"192.168.1.57",model:"Intelbras/Hikvision"},
+{id:58,name:"CAM-059",address:"SET UNIAO",lat:-16.709289,lng:-49.314875,status:"online",ip:"192.168.1.58",model:"Intelbras/Hikvision"},
+{id:59,name:"CAM-060",address:"SET UNIAO",lat:-16.709225,lng:-49.310975,status:"offline",ip:"192.168.1.59",model:"Intelbras/Hikvision"},
+{id:60,name:"CAM-061",address:"JD PLANALTO",lat:-16.711075,lng:-49.310775,status:"offline",ip:"192.168.1.60",model:"Intelbras/Hikvision"},
+{id:61,name:"CAM-062",address:"RES RECANTO DO BOSQUE",lat:-16.605874,lng:-49.317734,status:"online",ip:"192.168.1.61",model:"Intelbras/Hikvision"},
+{id:62,name:"CAM-063",address:"RES RECANTO DO BOSQUE",lat:-16.605874,lng:-49.317734,status:"online",ip:"192.168.1.62",model:"Intelbras/Hikvision"},
+{id:63,name:"CAM-064",address:"RES RECANTO DO BOSQUE",lat:-16.605874,lng:-49.317734,status:"online",ip:"192.168.1.63",model:"Intelbras/Hikvision"},
+{id:64,name:"CAM-065",address:"RES RECANTO DO BOSQUE",lat:-16.605874,lng:-49.317734,status:"online",ip:"192.168.1.64",model:"Intelbras/Hikvision"},
+{id:65,name:"CAM-066",address:"RES RECANTO DO BOSQUE",lat:-16.605874,lng:-49.317734,status:"online",ip:"192.168.1.65",model:"Intelbras/Hikvision"},
+{id:66,name:"CAM-067",address:"RES RECANTO DO BOSQUE",lat:-16.605874,lng:-49.317734,status:"online",ip:"192.168.1.66",model:"Intelbras/Hikvision"},
+{id:67,name:"CAM-068",address:"RES RECANTO DO BOSQUE",lat:-16.605874,lng:-49.317734,status:"online",ip:"192.168.1.67",model:"Intelbras/Hikvision"},
+{id:68,name:"CAM-069",address:"RES RECANTO DO BOSQUE",lat:-16.605874,lng:-49.317734,status:"online",ip:"192.168.1.68",model:"Intelbras/Hikvision"},
+{id:69,name:"CAM-070",address:"RES RECANTO DO BOSQUE",lat:-16.605874,lng:-49.317734,status:"online",ip:"192.168.1.69",model:"Intelbras/Hikvision"},
+{id:70,name:"CAM-071",address:"RES RECANTO DO BOSQUE",lat:-16.605874,lng:-49.317734,status:"online",ip:"192.168.1.70",model:"Intelbras/Hikvision"},
+{id:71,name:"CAM-072",address:"RES RECANTO DO BOSQUE",lat:-16.605874,lng:-49.317734,status:"online",ip:"192.168.1.71",model:"Intelbras/Hikvision"},
+{id:72,name:"CAM-073",address:"RES RECANTO DO BOSQUE",lat:-16.605874,lng:-49.317734,status:"online",ip:"192.168.1.72",model:"Intelbras/Hikvision"},
+{id:73,name:"CAM-074",address:"RES RECANTO DO BOSQUE",lat:-16.605874,lng:-49.317734,status:"online",ip:"192.168.1.73",model:"Intelbras/Hikvision"},
+{id:74,name:"CAM-075",address:"RES RECANTO DO BOSQUE",lat:-16.605874,lng:-49.317734,status:"online",ip:"192.168.1.74",model:"Intelbras/Hikvision"},
+{id:75,name:"CAM-76 -TERMINAL ISIDÓRIA",address:"Ponto 76 -TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.75",model:"Intelbras/Hikvision"},
+{id:76,name:"CAM-077",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.76",model:"Intelbras/Hikvision"},
+{id:77,name:"CAM-078",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.77",model:"Intelbras/Hikvision"},
+{id:78,name:"CAM-079",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.78",model:"Intelbras/Hikvision"},
+{id:79,name:"CAM-080",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.79",model:"Intelbras/Hikvision"},
+{id:80,name:"CAM-081",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.80",model:"Intelbras/Hikvision"},
+{id:81,name:"CAM-82 - TERMINAL ISIDÓRIA",address:"Ponto 82 - TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.81",model:"Intelbras/Hikvision"},
+{id:82,name:"CAM-083",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.82",model:"Intelbras/Hikvision"},
+{id:83,name:"CAM-084",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.83",model:"Intelbras/Hikvision"},
+{id:84,name:"CAM-085",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.84",model:"Intelbras/Hikvision"},
+{id:85,name:"CAM-086",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.85",model:"Intelbras/Hikvision"},
+{id:86,name:"CAM-087",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.86",model:"Intelbras/Hikvision"},
+{id:87,name:"CAM-088",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.87",model:"Intelbras/Hikvision"},
+{id:88,name:"CAM-089",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.88",model:"Intelbras/Hikvision"},
+{id:89,name:"CAM-090",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.89",model:"Intelbras/Hikvision"},
+{id:90,name:"CAM-091",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.90",model:"Intelbras/Hikvision"},
+{id:91,name:"CAM-092",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.91",model:"Intelbras/Hikvision"},
+{id:92,name:"CAM-093",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.92",model:"Intelbras/Hikvision"},
+{id:93,name:"CAM-094",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.93",model:"Intelbras/Hikvision"},
+{id:94,name:"CAM-095",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.94",model:"Intelbras/Hikvision"},
+{id:95,name:"CAM-096",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.95",model:"Intelbras/Hikvision"},
+{id:96,name:"CAM-097",address:"SET PEDRO LUDOVICO",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.96",model:"Intelbras/Hikvision"},
+{id:97,name:"CAM-098",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.97",model:"Intelbras/Hikvision"},
+{id:98,name:"CAM-099",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.98",model:"Intelbras/Hikvision"},
+{id:99,name:"CAM-100",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.99",model:"Intelbras/Hikvision"},
+{id:100,name:"CAM-101",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.100",model:"Intelbras/Hikvision"},
+{id:101,name:"CAM-102",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.101",model:"Intelbras/Hikvision"},
+{id:102,name:"CAM-103",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.102",model:"Intelbras/Hikvision"},
+{id:103,name:"CAM-104 - TERMINAL ISIDÓRIA",address:"Ponto 104 - TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.103",model:"Intelbras/Hikvision"},
+{id:104,name:"CAM-105",address:"TERMINAL ISIDÓRIA",lat:-16.71387,lng:-49.25277,status:"online",ip:"192.168.1.104",model:"Intelbras/Hikvision"},
+{id:105,name:"CAM-106",address:"AER INTERNACIONAL SANTA GENOVEVA",lat:-16.629842,lng:-49.214384,status:"offline",ip:"192.168.1.105",model:"Intelbras/Hikvision"},
+{id:106,name:"CAM-107",address:"AER INTERNACIONAL SANTA GENOVEVA",lat:-16.629842,lng:-49.214384,status:"offline",ip:"192.168.1.106",model:"Intelbras/Hikvision"},
+{id:107,name:"CAM-108",address:"AER INTERNACIONAL SANTA GENOVEVA",lat:-16.629842,lng:-49.214384,status:"offline",ip:"192.168.1.107",model:"Intelbras/Hikvision"},
+{id:108,name:"CAM-114",address:"SET PEDRO LUDOVICO",lat:-16.712196,lng:-49.253458,status:"offline",ip:"192.168.1.108",model:"Intelbras/Hikvision"},
+{id:109,name:"CAM-115",address:"ST PEDRO LUDOVICO",lat:-16.713772,lng:-49.252189,status:"online",ip:"192.168.1.109",model:"Intelbras/Hikvision"},
+{id:110,name:"CAM-116",address:"SET MARISTA",lat:-16.709436,lng:-49.31825,status:"offline",ip:"192.168.1.110",model:"Intelbras/Hikvision"},
+{id:111,name:"CAM-117",address:"SET SUL",lat:-16.702494,lng:-49.252791,status:"online",ip:"192.168.1.111",model:"Intelbras/Hikvision"},
+{id:112,name:"CAM-118",address:"SET CENTRAL",lat:-16.6882166,lng:-49.2537345,status:"offline",ip:"192.168.1.112",model:"Intelbras/Hikvision"},
+{id:113,name:"CAM-119",address:"SET CENTRAL",lat:-16.682428,lng:-49.2558,status:"online",ip:"192.168.1.113",model:"Intelbras/Hikvision"},
+{id:114,name:"CAM-120",address:"SET CENTRAL",lat:-16.6792506,lng:-49.2567141,status:"online",ip:"192.168.1.114",model:"Intelbras/Hikvision"},
+{id:115,name:"CAM-121",address:"R. 82 - St. Sul, Goiânia - GO, 74015-095",lat:-16.6792779,lng:-49.2568574,status:"online",ip:"192.168.1.115",model:"Intelbras/Hikvision"},
+{id:116,name:"CAM-122",address:"AV. GOIÁS",lat:-16.661236,lng:-49.260697,status:"online",ip:"192.168.1.116",model:"Intelbras/Hikvision"},
+{id:117,name:"CAM-123",address:"TERMINAL PAULO GARCIA",lat:-16.661254,lng:-49.26081,status:"offline",ip:"192.168.1.117",model:"Intelbras/Hikvision"},
+{id:118,name:"CAM-124",address:"Terminal Hailé Pinheiro - BRT",lat:-16.632911,lng:-49.272947,status:"offline",ip:"192.168.1.118",model:"Intelbras/Hikvision"},
+{id:119,name:"CAM-125",address:"Terminal Hailé Pinheiro - BRT",lat:-16.632911,lng:-49.272947,status:"offline",ip:"192.168.1.119",model:"Intelbras/Hikvision"},
+{id:120,name:"CAM-126 - Condomínio Rio Formoso",address:"Ponto 126 - Condomínio Rio Formoso",lat:-16.720262,lng:-49.325371,status:"offline",ip:"192.168.1.120",model:"Intelbras/Hikvision"},
+{id:121,name:"CAM-127 -Av. Genésio de Lima Brito",address:"Ponto 127 -Av. Genésio de Lima Brito",lat:-16.620483,lng:-49.303856,status:"offline",ip:"192.168.1.121",model:"Intelbras/Hikvision"},
+{id:122,name:"CAM-128",address:"JD GOIAS",lat:-16.606628,lng:-49.316811,status:"offline",ip:"192.168.1.122",model:"Intelbras/Hikvision"},
+{id:123,name:"CAM-129",address:"JD GOIAS",lat:-16.606928,lng:-49.317122,status:"offline",ip:"192.168.1.123",model:"Intelbras/Hikvision"},
+{id:124,name:"CAM-130",address:"JD GOIAS",lat:-16.713122,lng:-49.244558,status:"offline",ip:"192.168.1.124",model:"Intelbras/Hikvision"},
+{id:125,name:"CAM-131",address:"AV. SEGUNDA RADIAL",lat:-16.713122,lng:-49.244558,status:"offline",ip:"192.168.1.125",model:"Intelbras/Hikvision"},
+{id:126,name:"CAM-132",address:"SET LESTE VILA NOVA",lat:-16.710418,lng:-49.244225,status:"offline",ip:"192.168.1.126",model:"Intelbras/Hikvision"},
+{id:127,name:"CAM-133",address:"Viaduto José Luiz da Costa - St. Sul, Goiânia - GO, 74810-100",lat:-16.702108,lng:-49.244211,status:"offline",ip:"192.168.1.127",model:"Intelbras/Hikvision"},
+{id:128,name:"CAM-134",address:"Viaduto José Luiz da Costa - St. Sul, Goiânia - GO, 74810-100",lat:-16.702108,lng:-49.244211,status:"online",ip:"192.168.1.128",model:"Intelbras/Hikvision"},
+{id:129,name:"CAM-135",address:"AV. A",lat:-16.694467,lng:-49.244461,status:"offline",ip:"192.168.1.129",model:"Intelbras/Hikvision"},
+{id:130,name:"CAM-136",address:"Av. A - Jardim Goiás, Goiânia - GO, 74805-020",lat:-16.694467,lng:-49.244461,status:"offline",ip:"192.168.1.130",model:"Intelbras/Hikvision"},
+{id:131,name:"CAM-137",address:"AV. FUED JOSÉ SEBBA",lat:-16.686331,lng:-49.245569,status:"offline",ip:"192.168.1.131",model:"Intelbras/Hikvision"},
+{id:132,name:"CAM-139",address:"Av. Marginal Botafogo",lat:-16.6752,lng:-49.249911,status:"offline",ip:"192.168.1.132",model:"Intelbras/Hikvision"},
+{id:133,name:"CAM-140",address:"Av. Anhanguera, 4176 - Leste Vila Nova,",lat:-16.672658,lng:-49.250244,status:"offline",ip:"192.168.1.133",model:"Intelbras/Hikvision"},
+{id:134,name:"CAM-141",address:"BRO RECREIO DO FUNCIONARIO PUBLICO",lat:-16.672658,lng:-49.250244,status:"offline",ip:"192.168.1.134",model:"Intelbras/Hikvision"},
+{id:135,name:"CAM-142",address:"BRO AEROVIARIO",lat:-16.738805,lng:-49.312635,status:"offline",ip:"192.168.1.135",model:"Intelbras/Hikvision"},
+{id:136,name:"CAM-143",address:"SET CIDADE JARDIM",lat:-16.738737,lng:-49.312714,status:"offline",ip:"192.168.1.136",model:"Intelbras/Hikvision"},
+{id:137,name:"CAM-144",address:"BRO ANHANGUERA",lat:-16.657719,lng:-49.255381,status:"offline",ip:"192.168.1.137",model:"Intelbras/Hikvision"},
+{id:138,name:"CAM-R DR. Constâncio Gomes",address:"R DR. Constâncio Gomes",lat:-16.6483818,lng:-49.2618557,status:"online",ip:"192.168.1.138",model:"Intelbras/Hikvision"},
+{id:139,name:"CAM-146",address:"RES ELDORADO",lat:-16.651514,lng:-49.284789,status:"offline",ip:"192.168.1.139",model:"Intelbras/Hikvision"},
+{id:140,name:"CAM-147",address:"Vila Irany",lat:-16.655333,lng:-49.289947,status:"offline",ip:"192.168.1.140",model:"Intelbras/Hikvision"},
+{id:141,name:"CAM-148",address:"Av. João Damasceno",lat:-16.653625,lng:-49.294597,status:"offline",ip:"192.168.1.141",model:"Intelbras/Hikvision"},
+{id:142,name:"CAM-149",address:"R. Miguel do Carmo",lat:-16.720144,lng:-49.325307,status:"offline",ip:"192.168.1.142",model:"Intelbras/Hikvision"},
+{id:143,name:"CAM-150",address:"Av. Anhanguera",lat:-16.665483,lng:-49.315731,status:"offline",ip:"192.168.1.143",model:"Intelbras/Hikvision"},
+{id:144,name:"CAM-151",address:"Av. Anhanguera",lat:-16.665483,lng:-49.315731,status:"offline",ip:"192.168.1.144",model:"Intelbras/Hikvision"},
+{id:145,name:"CAM-152",address:"Av. Macambira",lat:-16.674594,lng:-49.320614,status:"offline",ip:"192.168.1.145",model:"Intelbras/Hikvision"},
+{id:146,name:"CAM-153",address:"Av. Macambira - Cidade Jardim",lat:-16.674594,lng:-49.320614,status:"offline",ip:"192.168.1.146",model:"Intelbras/Hikvision"},
+{id:147,name:"CAM-154",address:"R. da Alegria, 1199",lat:-16.680606,lng:-49.324275,status:"offline",ip:"192.168.1.147",model:"Intelbras/Hikvision"},
+{id:148,name:"CAM-155",address:"R. da Alegria, 1199 - Industrial Mooca",lat:-16.680606,lng:-49.324275,status:"offline",ip:"192.168.1.148",model:"Intelbras/Hikvision"},
+{id:149,name:"CAM-156",address:"Av. Milão - Res. Celina Park",lat:-16.709436,lng:-49.31825,status:"offline",ip:"192.168.1.149",model:"Intelbras/Hikvision"},
+{id:150,name:"CAM-157 - Parque Vaca Brava",address:"Ponto 157 - Parque Vaca Brava",lat:-16.709006,lng:-49.271381,status:"offline",ip:"192.168.1.150",model:"Intelbras/Hikvision"},
+{id:151,name:"CAM-158",address:"Parque Vaca Brava",lat:-16.70805,lng:-49.271175,status:"online",ip:"192.168.1.151",model:"Intelbras/Hikvision"},
+{id:152,name:"CAM-159",address:"SET BUENO / Parque Vaca Brava",lat:-16.709647,lng:-49.269333,status:"offline",ip:"192.168.1.152",model:"Intelbras/Hikvision"},
+{id:153,name:"CAM-160",address:"SET BUENO / Parque Vaca Brava",lat:-16.709632,lng:-49.270576,status:"offline",ip:"192.168.1.153",model:"Intelbras/Hikvision"},
+{id:154,name:"CAM-161",address:"SET BUENO / Parque Vaca Brava",lat:-16.709006,lng:-49.271381,status:"offline",ip:"192.168.1.154",model:"Intelbras/Hikvision"},
+{id:155,name:"CAM-162",address:"SET BUENO / Parque Vaca Brava",lat:-16.711223,lng:-49.269959,status:"online",ip:"192.168.1.155",model:"Intelbras/Hikvision"},
+{id:156,name:"CAM-163",address:"SET BUENO",lat:-16.711199,lng:-49.2693084,status:"online",ip:"192.168.1.156",model:"Intelbras/Hikvision"},
+{id:157,name:"CAM-164",address:"SET BUENO",lat:-16.711414,lng:-49.270704,status:"offline",ip:"192.168.1.157",model:"Intelbras/Hikvision"},
+{id:158,name:"CAM-165",address:"SET BUENO",lat:-16.7095866,lng:-49.272127,status:"online",ip:"192.168.1.158",model:"Intelbras/Hikvision"},
+{id:159,name:"CAM-166",address:"SET BUENO",lat:-16.708697,lng:-49.2727,status:"offline",ip:"192.168.1.159",model:"Intelbras/Hikvision"},
+{id:160,name:"CAM-167",address:"JD GOIAS",lat:-16.702739,lng:-49.237627,status:"offline",ip:"192.168.1.160",model:"Intelbras/Hikvision"},
+{id:161,name:"CAM-168",address:"JD GOIAS",lat:-16.701336,lng:-49.238364,status:"online",ip:"192.168.1.161",model:"Intelbras/Hikvision"},
+{id:162,name:"CAM-169",address:"R. 55 x Av.Goiás",lat:-16.668523,lng:-49.2599683,status:"offline",ip:"192.168.1.162",model:"Intelbras/Hikvision"},
+{id:163,name:"CAM-170",address:"JD GOIAS",lat:-16.702473,lng:-49.239471,status:"offline",ip:"192.168.1.163",model:"Intelbras/Hikvision"},
+{id:164,name:"CAM-171",address:"Av. Goiás - St. Central",lat:-16.664314,lng:-49.261472,status:"online",ip:"192.168.1.164",model:"Intelbras/Hikvision"},
+{id:165,name:"CAM-172",address:"JD GOIAS",lat:-16.705272,lng:-49.238017,status:"offline",ip:"192.168.1.165",model:"Intelbras/Hikvision"},
+{id:166,name:"CAM-173",address:"JD GOIAS",lat:-16.706368,lng:-49.236585,status:"online",ip:"192.168.1.166",model:"Intelbras/Hikvision"},
+{id:167,name:"CAM-174",address:"JD GOIAS",lat:-16.705326,lng:-49.235571,status:"online",ip:"192.168.1.167",model:"Intelbras/Hikvision"},
+{id:168,name:"CAM-175",address:"JD GOIAS",lat:-16.702059,lng:-49.238048,status:"offline",ip:"192.168.1.168",model:"Intelbras/Hikvision"},
+{id:169,name:"CAM-176",address:"JD GOIAS",lat:-16.7032,lng:-49.238823,status:"offline",ip:"192.168.1.169",model:"Intelbras/Hikvision"},
+{id:170,name:"CAM-177",address:"LOT FAICALVILLE",lat:-16.753556,lng:-49.324278,status:"online",ip:"192.168.1.170",model:"Intelbras/Hikvision"},
+{id:171,name:"CAM-178",address:"SET RIO FORMOSO GLEBAS DE 1 A 6",lat:-16.719776,lng:-49.327316,status:"offline",ip:"192.168.1.171",model:"Intelbras/Hikvision"},
+{id:172,name:"CAM-179",address:"LOT CELINA PARK",lat:-16.711098,lng:-49.319008,status:"offline",ip:"192.168.1.172",model:"Intelbras/Hikvision"},
+{id:173,name:"CAM-180",address:"LOT FAICALVILLE / Pq. da Vizinhança II",lat:-16.734623,lng:-49.319994,status:"offline",ip:"192.168.1.173",model:"Intelbras/Hikvision"},
+{id:174,name:"CAM-181",address:"LOT FAICALVILLE",lat:-16.7457151,lng:-49.315063,status:"offline",ip:"192.168.1.174",model:"Intelbras/Hikvision"},
+{id:175,name:"CAM-182",address:"LOT FAICALVILLE",lat:-16.753828,lng:-49.324151,status:"offline",ip:"192.168.1.175",model:"Intelbras/Hikvision"},
+{id:176,name:"CAM-184",address:"5ª Av. X Av. Anhanguera",lat:-16.669894,lng:-49.245233,status:"offline",ip:"192.168.1.176",model:"Intelbras/Hikvision"},
+{id:177,name:"CAM-185",address:"RES GRANVILLE",lat:-16.723781,lng:-49.316215,status:"offline",ip:"192.168.1.177",model:"Intelbras/Hikvision"},
+{id:178,name:"CAM-186",address:"VI ITATIAIA",lat:-16.602512,lng:-49.259834,status:"offline",ip:"192.168.1.178",model:"Intelbras/Hikvision"},
+{id:179,name:"CAM-188",address:"SET SUL",lat:-16.685699,lng:-49.254725,status:"offline",ip:"192.168.1.179",model:"Intelbras/Hikvision"},
+{id:180,name:"CAM-189",address:"SET SUL",lat:-16.690503,lng:-49.252632,status:"offline",ip:"192.168.1.180",model:"Intelbras/Hikvision"},
+{id:181,name:"CAM-200",address:"SET SUL",lat:-16.68995,lng:-49.254246,status:"offline",ip:"192.168.1.181",model:"Intelbras/Hikvision"},
+{id:182,name:"CAM-201",address:"SET SUL",lat:-16.68908,lng:-49.253626,status:"offline",ip:"192.168.1.182",model:"Intelbras/Hikvision"},
+{id:183,name:"CAM-202",address:"SET BUENO",lat:-16.687318,lng:-49.280414,status:"offline",ip:"192.168.1.183",model:"Intelbras/Hikvision"},
+{id:184,name:"CAM-203",address:"SET BUENO",lat:-16.687794,lng:-49.280427,status:"offline",ip:"192.168.1.184",model:"Intelbras/Hikvision"},
+{id:185,name:"CAM-204",address:"SET BUENO",lat:-16.688526,lng:-49.281144,status:"offline",ip:"192.168.1.185",model:"Intelbras/Hikvision"},
+{id:186,name:"CAM-205",address:"SET BUENO",lat:-16.687709,lng:-49.281704,status:"offline",ip:"192.168.1.186",model:"Intelbras/Hikvision"},
+{id:187,name:"CAM-206",address:"SET LESTE UNIVERSITARIO",lat:-16.674321,lng:-49.24321,status:"online",ip:"192.168.1.187",model:"Intelbras/Hikvision"},
+{id:188,name:"CAM-207",address:"SET CENTRAL",lat:-16.678912,lng:-49.259876,status:"online",ip:"192.168.1.188",model:"Intelbras/Hikvision"},
+{id:189,name:"CAM-208",address:"SET OESTE",lat:-16.684972,lng:-49.26426,status:"offline",ip:"192.168.1.189",model:"Intelbras/Hikvision"},
+{id:190,name:"CAM-209",address:"SET CENTRAL",lat:-16.679348,lng:-49.252223,status:"offline",ip:"192.168.1.190",model:"Intelbras/Hikvision"},
+{id:191,name:"CAM-210",address:"SET CENTRAL",lat:-16.675107,lng:-49.259144,status:"offline",ip:"192.168.1.191",model:"Intelbras/Hikvision"},
+{id:192,name:"CAM-211",address:"SET CENTRAL",lat:-16.66382,lng:-49.259532,status:"offline",ip:"192.168.1.192",model:"Intelbras/Hikvision"},
+{id:193,name:"CAM-212",address:"SET CENTRAL",lat:-16.664933,lng:-49.263361,status:"online",ip:"192.168.1.193",model:"Intelbras/Hikvision"},
+{id:194,name:"CAM-213",address:"SET CENTRAL",lat:-16.670681,lng:-49.253911,status:"online",ip:"192.168.1.194",model:"Intelbras/Hikvision"},
+{id:195,name:"CAM-214",address:"SET CENTRAL",lat:-16.672212,lng:-49.2624,status:"offline",ip:"192.168.1.195",model:"Intelbras/Hikvision"},
+{id:196,name:"CAM-215",address:"SET CENTRAL",lat:-16.673496,lng:-49.257563,status:"offline",ip:"192.168.1.196",model:"Intelbras/Hikvision"},
+{id:197,name:"CAM-216",address:"SET CENTRAL",lat:-16.673541,lng:-49.264081,status:"offline",ip:"192.168.1.197",model:"Intelbras/Hikvision"},
+{id:198,name:"CAM-217",address:"SET CENTRAL",lat:-16.676819,lng:-49.260498,status:"offline",ip:"192.168.1.198",model:"Intelbras/Hikvision"},
+{id:199,name:"CAM-218",address:"SET CENTRAL",lat:-16.674041,lng:-49.259444,status:"online",ip:"192.168.1.199",model:"Intelbras/Hikvision"},
+{id:200,name:"CAM-219",address:"SET CENTRAL",lat:-16.670223,lng:-49.257505,status:"online",ip:"192.168.1.200",model:"Intelbras/Hikvision"},
+{id:201,name:"CAM-220",address:"SET CENTRAL",lat:-16.661125,lng:-49.257321,status:"online",ip:"192.168.1.201",model:"Intelbras/Hikvision"},
+{id:202,name:"CAM-221",address:"SET CENTRAL",lat:-16.659922,lng:-49.257616,status:"offline",ip:"192.168.1.202",model:"Intelbras/Hikvision"},
+{id:203,name:"CAM-222",address:"SET CENTRAL",lat:-16.658636,lng:-49.258104,status:"offline",ip:"192.168.1.203",model:"Intelbras/Hikvision"},
+{id:204,name:"CAM-223",address:"SET CENTRAL",lat:-16.656661,lng:-49.258926,status:"offline",ip:"192.168.1.204",model:"Intelbras/Hikvision"},
+{id:205,name:"CAM-224",address:"SET CENTRAL",lat:-16.657727,lng:-49.257386,status:"offline",ip:"192.168.1.205",model:"Intelbras/Hikvision"},
+{id:206,name:"CAM-225",address:"SET CENTRAL",lat:-16.658788,lng:-49.256244,status:"online",ip:"192.168.1.206",model:"Intelbras/Hikvision"},
+{id:207,name:"CAM-226",address:"SET CENTRAL",lat:-16.659253,lng:-49.257753,status:"offline",ip:"192.168.1.207",model:"Intelbras/Hikvision"},
+{id:208,name:"CAM-227",address:"SET CENTRAL",lat:-16.659897,lng:-49.255297,status:"offline",ip:"192.168.1.208",model:"Intelbras/Hikvision"},
+{id:209,name:"CAM-228",address:"SET CENTRAL",lat:-16.660435,lng:-49.255003,status:"offline",ip:"192.168.1.209",model:"Intelbras/Hikvision"},
+{id:210,name:"CAM-229",address:"SET CENTRAL",lat:-16.661154,lng:-49.254785,status:"offline",ip:"192.168.1.210",model:"Intelbras/Hikvision"},
+{id:211,name:"CAM-230",address:"SET CENTRAL",lat:-16.676317,lng:-49.258731,status:"offline",ip:"192.168.1.211",model:"Intelbras/Hikvision"},
+{id:212,name:"CAM-231",address:"SET CENTRAL",lat:-16.677654,lng:-49.256789,status:"offline",ip:"192.168.1.212",model:"Intelbras/Hikvision"},
+{id:213,name:"CAM-232",address:"SET CENTRAL",lat:-16.677543,lng:-49.256678,status:"offline",ip:"192.168.1.213",model:"Intelbras/Hikvision"},
+{id:214,name:"CAM-233",address:"SET CENTRAL",lat:-16.678765,lng:-49.25789,status:"offline",ip:"192.168.1.214",model:"Intelbras/Hikvision"},
+{id:215,name:"CAM-234",address:"SET CENTRAL",lat:-16.67607,lng:-49.257919,status:"offline",ip:"192.168.1.215",model:"Intelbras/Hikvision"},
+{id:216,name:"CAM-235",address:"VI REDENCAO",lat:-16.718675,lng:-49.245206,status:"online",ip:"192.168.1.216",model:"Intelbras/Hikvision"},
+{id:217,name:"CAM-236",address:"JD GOIAS",lat:-16.705216,lng:-49.24014,status:"online",ip:"192.168.1.217",model:"Intelbras/Hikvision"},
+{id:218,name:"CAM-237",address:"SET LESTE UNIVERSITARIO",lat:-16.678447,lng:-49.248982,status:"offline",ip:"192.168.1.218",model:"Intelbras/Hikvision"},
+{id:219,name:"CAM-238",address:"SET LESTE UNIVERSITARIO",lat:-16.676789,lng:-49.244321,status:"offline",ip:"192.168.1.219",model:"Intelbras/Hikvision"},
+{id:220,name:"CAM-239",address:"SET LESTE UNIVERSITARIO",lat:-16.676578,lng:-49.24483,status:"offline",ip:"192.168.1.220",model:"Intelbras/Hikvision"},
+{id:221,name:"CAM-240",address:"SET LESTE UNIVERSITARIO",lat:-16.676123,lng:-49.243456,status:"offline",ip:"192.168.1.221",model:"Intelbras/Hikvision"},
+{id:222,name:"CAM-241",address:"SET LESTE UNIVERSITARIO",lat:-16.675987,lng:-49.242876,status:"offline",ip:"192.168.1.222",model:"Intelbras/Hikvision"},
+{id:223,name:"CAM-242",address:"SET LESTE UNIVERSITARIO",lat:-16.677123,lng:-49.241234,status:"offline",ip:"192.168.1.223",model:"Intelbras/Hikvision"},
+{id:224,name:"CAM-243",address:"SET LESTE UNIVERSITARIO",lat:-16.678459,lng:-49.248964,status:"offline",ip:"192.168.1.224",model:"Intelbras/Hikvision"},
+{id:225,name:"CAM-244",address:"SET CENTRAL",lat:-16.679468,lng:-49.252747,status:"offline",ip:"192.168.1.225",model:"Intelbras/Hikvision"},
+{id:226,name:"CAM-245",address:"SET CENTRAL",lat:-16.680112,lng:-49.254562,status:"offline",ip:"192.168.1.226",model:"Intelbras/Hikvision"},
+{id:227,name:"CAM-Terminal Paulo Garcia",address:"Terminal Paulo Garcia",lat:-16.659824,lng:-49.261276,status:"offline",ip:"192.168.1.227",model:"Intelbras/Hikvision"},
+{id:228,name:"CAM-Hospital Cais Campinas",address:"Hospital Cais Campinas",lat:-16.667703,lng:-49.277573,status:"online",ip:"192.168.1.228",model:"Intelbras/Hikvision"},
+{id:229,name:"CAM-110",address:"SET CAMPINAS",lat:-16.669771,lng:-49.288995,status:"offline",ip:"192.168.1.229",model:"Intelbras/Hikvision"},
+{id:230,name:"CAM-112",address:"SET CAMPINAS",lat:-16.668387,lng:-49.293041,status:"offline",ip:"192.168.1.230",model:"Intelbras/Hikvision"},
+{id:231,name:"CAM-111",address:"SET CAMPINAS",lat:-16.6689541,lng:-49.2909394,status:"offline",ip:"192.168.1.231",model:"Intelbras/Hikvision"},
+{id:232,name:"CAM-113",address:"SET CIDADE JARDIM",lat:-16.674579,lng:-49.321066,status:"offline",ip:"192.168.1.232",model:"Intelbras/Hikvision"},
+{id:233,name:"CAM-Parque Amazônia",address:"Parque Amazônia",lat:-16.715682,lng:-49.322189,status:"offline",ip:"192.168.1.233",model:"Intelbras/Hikvision"},
+{id:234,name:"CAM-DT SD 15 Centro Praça Moreira",address:"DT SD 15 Centro Praça Moreira",lat:-16.7090582,lng:-49.2625025,status:"online",ip:"192.168.1.234",model:"Intelbras/Hikvision"},
+{id:235,name:"CAM-SD 69 Av Rio Grande do Sul x R J",address:"SD 69 Av Rio Grande do Sul x R J",lat:-16.667056,lng:-49.2926942,status:"online",ip:"192.168.1.235",model:"Intelbras/Hikvision"},
+{id:236,name:"CAM-DT SD 49 Av T1",address:"DT SD 49 Av T1",lat:-16.6946373,lng:-49.2762341,status:"online",ip:"192.168.1.236",model:"Intelbras/Hikvision"},
+{id:237,name:"CAM-SD 36 R Jose Hermano x Av Albert",address:"SD 36 R Jose Hermano x Av Albert",lat:-16.6686655,lng:-49.2940919,status:"online",ip:"192.168.1.237",model:"Intelbras/Hikvision"},
+{id:238,name:"CAM-SD 64 R Geraldo Ney x 24 de Outubro",address:"SD 64 R Geraldo Ney x 24 de Outubro",lat:-16.6677729,lng:-49.2946463,status:"online",ip:"192.168.1.238",model:"Intelbras/Hikvision"},
+{id:239,name:"CAM-SD 65 R Jose Hermano x Av Rio Grande do Sul",address:"SD 65 R Jose Hermano x Av Rio Grande do Sul",lat:-16.6668093,lng:-49.2936084,status:"online",ip:"192.168.1.239",model:"Intelbras/Hikvision"},
+{id:240,name:"CAM-DT2 SD 48 Al Luci Rassi x Av. Independência",address:"DT2 SD 48 Al Luci Rassi x Av. Independência",lat:-16.7444686,lng:-49.3086111,status:"online",ip:"192.168.1.240",model:"Intelbras/Hikvision"},
+{id:241,name:"CAM-DT2 44 Al Abel Soares x Al Alcides Araujo",address:"DT2 44 Al Abel Soares x Al Alcides Araujo",lat:-16.743601,lng:-49.318146,status:"online",ip:"192.168.1.241",model:"Intelbras/Hikvision"},
+{id:242,name:"CAM-DT SD 14 Av Perimetral x R. 260",address:"DT SD 14 Av Perimetral x R. 260",lat:-16.6872204,lng:-49.28152,status:"online",ip:"192.168.1.242",model:"Intelbras/Hikvision"},
+{id:243,name:"CAM-Maternidade Dona Iris",address:"Maternidade Dona Iris",lat:-16.717111,lng:-49.241538,status:"online",ip:"192.168.1.243",model:"Intelbras/Hikvision"}];
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+let currentUser = null, viewAs = 'admin', page = 'dashboard';
+let CAMERAS = [...KMZ_CAMERAS];
+let USERS = [], tickets = [];
+let leafletMap = null, markersLayer = null, selectedCam = null;
+let openTicketId = null, showNewTicket = false, showImportModal = false;
+let camHistoryId = null, previewImg = null;
+let showUserModal = false, editUserId = null, deleteUserId = null;
+let mapFilter = 'all', mapSearch = '', camFilter = 'all', camSearch = '';
+
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+const fmtDate  = d => new Date(d).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+const timeDiff = (a,b) => {const ms=new Date(b)-new Date(a),h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000);return h>24?Math.floor(h/24)+'d '+h%24+'h':h>0?h+'h '+m+'min':m+'min';};
+const statusClass = s => ({'Aberto':'s-aberto','Reconhecido':'s-reconhecido','Técnico Designado':'s-tecnico','Agendado':'s-agendado','Em Andamento':'s-andamento','Finalizado':'s-finalizado'}[s]||'s-aberto');
+const effRole   = () => currentUser.role==='admin' ? viewAs : currentUser.role;
+const openTks   = () => tickets.filter(t=>t.status!=='Finalizado');
+const myTks     = () => currentUser.role==='tech' ? tickets.filter(t=>t.tech_id===currentUser.id) : tickets;
+const techs     = () => USERS.filter(u=>u.role==='tech');
+const getOnline  = () => CAMERAS.filter(c=>c.status==='online').length;
+const getOffline = () => CAMERAS.filter(c=>c.status==='offline').length;
+const makeAvatar = n => n.split(' ').filter((_,i,a)=>i===0||i===a.length-1).map(w=>w[0]||'').join('').toUpperCase().slice(0,2)||'??';
+const roleLabel  = r => r==='admin'?'Administrador':r==='tech'?'Técnico':'Cliente';
+const roleClass  = r => r==='admin'?'s-tecnico':r==='tech'?'s-reconhecido':'s-finalizado';
+
+function showToast(msg, dur=3000){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), dur);
+}
+function setLoading(show){
+  const el=document.getElementById('loading-overlay');
+  if(el) el.style.display = show ? 'flex' : 'none';
+}
+
+// ── GPS ───────────────────────────────────────────────────────────────────────
+function openGps(lat,lng,name){
+  const enc=encodeURIComponent(name);
+  const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isAndroid=/Android/.test(navigator.userAgent);
+  if(isIOS){ window.location.href=`maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`; setTimeout(()=>window.open(`https://maps.google.com/maps?daddr=${lat},${lng}`,'_blank'),500); }
+  else if(isAndroid){ window.location.href=`geo:${lat},${lng}?q=${lat},${lng}(${enc})`; setTimeout(()=>window.open(`https://maps.google.com/maps?daddr=${lat},${lng}`,'_blank'),500); }
+  else window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`,'_blank');
+}
+
+// ── ICONS ─────────────────────────────────────────────────────────────────────
+const IC={
+  shield:`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+  dash:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`,
+  cam:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>`,
+  ticket:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5v2M15 11v2M15 17v2M5 5h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V7a2 2 0 0 1 2-2z"/></svg>`,
+  users:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+  logout:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+  plus:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  x:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+  check:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+  tool:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
+  upload:`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>`,
+  settings:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+  eye:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
+  alert:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+  edit:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+  trash:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
+  history:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>`,
+  nav:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>`,
+  refresh:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`,
+};
+
+// ── INIT — load data from Supabase ────────────────────────────────────────────
+async function init(){
+  setLoading(true);
+  try {
+    // Load users
+    USERS = await sbGet('users','select=*&order=created_at.asc');
+    // Load tickets with all fields
+    const rawTks = await sbGet('tickets','select=*&order=created_at.desc');
+    tickets = rawTks.map(normalizeTicket);
+    // Cameras already loaded from KMZ; optionally sync from DB
+    try {
+      const dbCams = await sbGet('cameras','select=*&order=id.asc');
+      if(dbCams && dbCams.length > 0) CAMERAS = dbCams.map(c=>({...c, model: c.model||'Intelbras/Hikvision'}));
+    } catch(e){ /* use KMZ cameras */ }
+    setLoading(false);
+    render();
+  } catch(err){
+    console.error('Init error:', err);
+    setLoading(false);
+    // Fall back to offline demo mode
+    USERS = [
+      {id:'00000000-0000-0000-0000-000000000001',name:'Carlos Admin',email:'admin@segvision.com.br',phone:'(62) 99999-0001',role:'admin',password_hash:'admin123',avatar:'CA'},
+      {id:'00000000-0000-0000-0000-000000000002',name:'Fernanda Cliente',email:'fernanda@cliente.com.br',phone:'(62) 98888-0002',role:'client',password_hash:'cliente123',avatar:'FC'},
+      {id:'00000000-0000-0000-0000-000000000003',name:'Ricardo Técnico',email:'ricardo@segvision.com.br',phone:'(62) 97777-0003',role:'tech',password_hash:'tecnico123',avatar:'RT'},
+    ];
+    showToast('⚠ Modo offline — banco não conectado. Execute o SQL no Supabase.', 6000);
+    render();
+  }
+}
+
+function normalizeTicket(t){
+  // Convert DB snake_case to app format
+  return {
+    id: t.id,
+    title: t.title,
+    cameraId: t.camera_id,
+    status: t.status,
+    priority: t.priority,
+    requester: {name: t.requester_name, email: t.requester_email, phone: t.requester_phone},
+    description: t.description,
+    tech_id: t.tech_id,
+    techId: t.tech_id,
+    displacement: t.displacement,
+    images: t.images||[],
+    timeline: t.timeline||[],
+    createdAt: t.created_at,
+  };
+}
+
+// ── AUTH ──────────────────────────────────────────────────────────────────────
+async function doLogin(){
+  const email = document.getElementById('l-email').value.trim();
+  const pass  = document.getElementById('l-pass').value;
+  const errEl = document.getElementById('l-err');
+  errEl.style.display='none';
+  const u = USERS.find(x => x.email===email && x.password_hash===pass);
+  if(u){ currentUser=u; viewAs=u.role; render(); }
+  else { errEl.textContent='E-mail ou senha inválidos.'; errEl.style.display='block'; }
+}
+function quickLogin(email){
+  const u=USERS.find(x=>x.email===email);
+  if(u){ currentUser=u; viewAs=u.role; render(); }
+}
+function doLogout(){ currentUser=null; leafletMap=null; render(); }
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function render(){
+  document.getElementById('root').innerHTML = currentUser ? renderShell() : renderLogin();
+  bindKeys();
+  if(page==='dashboard'||page==='cameras') requestAnimationFrame(initMap);
+}
+
+// ── LOGIN ─────────────────────────────────────────────────────────────────────
+function renderLogin(){
+  return `<div class="login-page"><div class="login-card">
+    <div class="login-logo"><img src="data:image/png;base64,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" alt="Brilha Goiânia"/></div>
+    <div class="login-sub">Sistema de Monitoramento</div>
+    <div id="l-err" style="display:none" class="login-err"></div>
+    <div class="f-group" style="margin-bottom:12px">
+      <label class="f-label">E-mail</label>
+      <input class="f-input" id="l-email" type="email" placeholder="seu@email.com" onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
+    <div class="f-group" style="margin-bottom:18px">
+      <label class="f-label">Senha</label>
+      <input class="f-input" id="l-pass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;font-size:13px;letter-spacing:1.5px" onclick="doLogin()">ENTRAR</button>
+    <div class="demo-sec">
+      <div class="demo-lbl">Acesso rápido</div>
+      ${USERS.map(u=>`<button class="demo-btn" onclick="quickLogin('${u.email}')">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:13px;font-weight:500">${u.name}</span>
+          <span class="badge ${roleClass(u.role)}">${roleLabel(u.role)}</span>
+        </div>
+        <div class="demo-cred">${u.email} / ${u.password_hash}</div>
+      </button>`).join('')}
+    </div>
+  </div></div>`;
+}
+
+// ── SHELL ─────────────────────────────────────────────────────────────────────
+function renderShell(){
+  const er=effRole();
+  const navItems=[
+    {id:'dashboard',label:'Dashboard',icon:'dash'},
+    {id:'cameras',label:'Câmeras',icon:'cam'},
+    {id:'tickets',label:'Chamados',icon:'ticket',badge:er!=='client'?openTks().length:0},
+    ...(er==='admin'?[{id:'users',label:'Usuários',icon:'users'}]:[]),
+  ];
+  const titles={dashboard:'Dashboard',cameras:'Câmeras',tickets:'Chamados',users:'Usuários'};
+  return `<div class="app">
+    <aside class="sidebar">
+      <div class="sb-logo"><img src="data:image/png;base64,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" style="height:34px;object-fit:contain"/></div>
+      <nav class="sb-nav">
+        <div class="sb-sec">Principal</div>
+        ${navItems.map(n=>`<div class="nav-item${page===n.id?' active':''}" onclick="goPage('${n.id}')">
+          ${IC[n.icon]}${n.label}${n.badge>0?`<span class="nav-badge">${n.badge}</span>`:''}
+        </div>`).join('')}
+      </nav>
+      <div class="sb-user">
+        <div class="avatar">${currentUser.avatar||makeAvatar(currentUser.name)}</div>
+        <div class="uinfo"><div class="uname">${currentUser.name}</div><div class="urole">${currentUser.role}</div></div>
+        <button class="icon-btn" onclick="doLogout()" title="Sair">${IC.logout}</button>
+      </div>
+    </aside>
+    <main class="main">
+      <div class="topbar">
+        <div class="topbar-title">${titles[page]||''}</div>
+        <div class="topbar-right">
+          ${currentUser.role==='admin'&&viewAs==='admin'?`<button class="btn btn-ghost btn-sm" onclick="openImportModal()" style="border-color:var(--accent);color:var(--accent);font-weight:700">⬆ Importar KMZ</button>`:''}
+          ${currentUser.role==='admin'?`<div class="view-toggle">
+            <button class="vt-btn${viewAs==='admin'?' active':''}" onclick="setView('admin')">${IC.settings} Admin</button>
+            <button class="vt-btn${viewAs==='client'?' active':''}" onclick="setView('client')">${IC.eye} Cliente</button>
+          </div>`:''}
+          ${(er==='admin'||er==='client')?`<button class="btn btn-primary btn-sm" onclick="openNewTicket()">${IC.plus} Novo Chamado</button>`:''}
+          <button class="btn btn-ghost btn-sm" onclick="reloadData()" title="Atualizar dados">${IC.refresh}</button>
+        </div>
+      </div>
+      <div class="content">${renderPage()}</div>
+    </main>
+  </div>
+  ${openTicketId?renderTicketModal():''}
+  ${showNewTicket?renderNewTicketModal():''}
+  ${showImportModal?renderImportModal():''}
+  ${camHistoryId?renderCamHistoryModal():''}
+  ${previewImg?renderImgPreview():''}
+  ${showUserModal?renderUserModal():''}
+  ${deleteUserId?renderDeleteConfirm():''}`;
+}
+
+function renderPage(){
+  if(page==='dashboard') return renderDashboard();
+  if(page==='cameras')   return renderCameras();
+  if(page==='tickets')   return renderTickets();
+  if(page==='users')     return renderUsers();
+  return '';
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────────────────
+function renderDashboard(){
+  const er=effRole();
+  const on=getOnline(),off=getOffline(),tot=CAMERAS.length,pct=Math.round(on/tot*100);
+  const tks=er==='tech'?myTks():tickets;
+  return `
+  <div class="stats-grid">
+    <div class="stat-card sc-blue"><div class="sc-icon ic-blue">${IC.cam}</div><div class="sc-val">${tot}</div><div class="sc-lbl">Total</div><div class="sc-sub">câmeras</div></div>
+    <div class="stat-card sc-green"><div class="sc-icon ic-green">${IC.check}</div><div class="sc-val" style="color:var(--green)">${on}</div><div class="sc-lbl">Online</div><div class="sc-sub" style="color:var(--green)">operacionais</div></div>
+    <div class="stat-card sc-red"><div class="sc-icon ic-red">${IC.alert}</div><div class="sc-val" style="color:var(--red)">${off}</div><div class="sc-lbl">Offline</div><div class="sc-sub" style="color:var(--red)">requerem atenção</div></div>
+    <div class="stat-card sc-yellow"><div class="sc-icon ic-yellow">${IC.eye}</div><div class="sc-val" style="color:var(--yellow)">${pct}%</div><div class="sc-lbl">Disponibilidade</div><div class="sc-sub">${on}/${tot} câmeras</div></div>
+    <div class="stat-card sc-accent"><div class="sc-icon ic-accent">${IC.ticket}</div><div class="sc-val" style="color:var(--accent)">${openTks().length}</div><div class="sc-lbl">Tickets Abertos</div><div class="sc-sub">${tickets.filter(t=>t.status==='Finalizado').length} finalizados</div></div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">${IC.cam} Mapa de Câmeras — Goiânia, GO</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-sm${mapFilter==='all'?' btn-primary':' btn-ghost'}" onclick="setMapFilter('all')">Todas (${tot})</button>
+        <button class="btn btn-sm${mapFilter==='online'?' btn-success':' btn-ghost'}" onclick="setMapFilter('online')">● Online (${on})</button>
+        <button class="btn btn-sm${mapFilter==='offline'?' btn-danger':' btn-ghost'}" onclick="setMapFilter('offline')">● Offline (${off})</button>
+        <div style="position:relative">
+          <input style="background:var(--bg4);border:1px solid var(--border);color:var(--text);padding:5px 10px 5px 26px;border-radius:16px;font-size:11px;font-family:'Roboto',sans-serif;outline:none;width:150px;transition:border-color .2s" placeholder="Buscar câmera..." oninput="setMapSearch(this.value)" value="${mapSearch}" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"/>
+        </div>
+      </div>
+    </div>
+    <div class="map-wrap"><div id="leaflet-map"></div>
+      <div class="map-legend">
+        <div class="ml-row"><div class="ml-dot" style="background:var(--green);box-shadow:0 0 5px var(--green)"></div>Online (${on})</div>
+        <div class="ml-row"><div class="ml-dot" style="background:var(--red);box-shadow:0 0 5px var(--red)"></div>Offline (${off})</div>
+      </div>
+    </div>
+    <div class="map-info-bar" id="map-info-bar"><span style="font-size:12px;color:var(--text-muted)">Clique em um marcador para ver detalhes</span></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">${IC.ticket} Chamados Recentes</div><button class="btn btn-ghost btn-sm" onclick="goPage('tickets')">Ver Todos →</button></div>
+    <div class="card-body">
+      ${tks.length===0?`<div class="empty" style="padding:24px 0"><div style="color:var(--green);margin-bottom:8px">${IC.check}</div><div style="font-size:13px;font-weight:500;color:var(--text)">Nenhum chamado em aberto</div></div>`
+      :`<div class="tk-list">${tks.slice(0,5).map(t=>tkCard(t)).join('')}</div>`}
+    </div>
+  </div>`;
+}
+
+// ── CAMERAS ───────────────────────────────────────────────────────────────────
+function renderCameras(){
+  const er=effRole();
+  let list=CAMERAS;
+  if(camFilter==='online') list=list.filter(c=>c.status==='online');
+  if(camFilter==='offline') list=list.filter(c=>c.status==='offline');
+  if(camSearch){const q=camSearch.toLowerCase();list=list.filter(c=>c.name.toLowerCase().includes(q)||c.address.toLowerCase().includes(q));}
+  return `
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+      <div class="card-title">${IC.cam} Mapa Interativo</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-sm${camFilter==='all'?' btn-primary':' btn-ghost'}" onclick="camFilter='all';leafletMap=null;render()">Todas</button>
+        <button class="btn btn-sm${camFilter==='online'?' btn-success':' btn-ghost'}" onclick="camFilter='online';leafletMap=null;render()">● Online</button>
+        <button class="btn btn-sm${camFilter==='offline'?' btn-danger':' btn-ghost'}" onclick="camFilter='offline';leafletMap=null;render()">● Offline</button>
+        <input style="background:var(--bg4);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:16px;font-size:11px;font-family:'Roboto',sans-serif;outline:none;width:150px" placeholder="Buscar..." oninput="camSearch=this.value;leafletMap=null;render()" value="${camSearch}"/>
+      </div>
+    </div>
+    <div class="map-wrap"><div id="leaflet-map"></div>
+      <div class="map-legend">
+        <div class="ml-row"><div class="ml-dot" style="background:var(--green)"></div>Online</div>
+        <div class="ml-row"><div class="ml-dot" style="background:var(--red)"></div>Offline</div>
+      </div>
+    </div>
+    <div class="map-info-bar" id="map-info-bar"><span style="font-size:12px;color:var(--text-muted)">Clique em um marcador para ver detalhes</span></div>
+  </div>
+  <div style="margin-bottom:10px;font-size:12px;color:var(--text-muted)">${list.length} câmeras exibidas</div>
+  <div class="cam-grid">
+    ${list.map(c=>`<div class="cam-card ${c.status}" onclick="focusCam(${c.id})">
+      <div class="cc-head"><span class="cc-name">${c.name}</span><span class="cc-status ${c.status==='online'?'cc-online':'cc-offline'}">${c.status==='online'?'● Online':'● Offline'}</span></div>
+      <div class="cc-addr">${c.address}</div>
+      <div class="cc-meta"><span>${c.model||'Intelbras/Hikvision'}</span><span class="cc-ip">${c.ip||''}</span></div>
+      <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center" onclick="event.stopPropagation();openCamHistory(${c.id})">${IC.history} Histórico</button>
+        <button class="btn btn-sm" style="flex:1;justify-content:center;background:var(--gold-grad);color:#0a0d16;font-weight:700" onclick="event.stopPropagation();openGps(${c.lat},${c.lng},'${c.name}')">${IC.nav} GPS</button>
+        ${(er==='admin'||er==='client')?'<button class="btn btn-danger btn-sm" style="flex:1;justify-content:center" onclick="event.stopPropagation();selectedCam=CAMERAS.find(x=>x.id==='+c.id+');openNewTicket()">'+IC.ticket+' Chamado</button>':''}
+      </div>
+    </div>`).join('')}
+  </div>`;
+}
+
+// ── TICKETS ───────────────────────────────────────────────────────────────────
+function renderTickets(){
+  const er=effRole();
+  const list=er==='tech'?myTks():tickets;
+  const STATUS_FLOW=['Aberto','Reconhecido','Técnico Designado','Agendado','Em Andamento','Finalizado'];
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+    <div class="tag-strip">${list.length>0?STATUS_FLOW.map(s=>{const n=list.filter(t=>t.status===s).length;return n>0?`<span class="badge ${statusClass(s)}">${s}: ${n}</span>`:''}).join(''):'<span style="font-size:12px;color:var(--text-muted)">Nenhum chamado</span>'}</div>
+    ${(er==='admin'||er==='client')?`<button class="btn btn-primary btn-sm" onclick="openNewTicket()">${IC.plus} Novo Chamado</button>`:''}
+  </div>
+  <div class="tk-list">
+    ${list.length?list.map(t=>tkCard(t)).join(''):`<div class="empty">${IC.ticket}<div style="margin-top:12px;font-size:13px;font-weight:500;color:var(--text)">Nenhum chamado encontrado</div></div>`}
+  </div>`;
+}
+
+function tkCard(t){
+  const cam=CAMERAS.find(c=>c.id===t.cameraId);
+  const tech=USERS.find(u=>u.id===t.techId||u.id===t.tech_id);
+  return `<div class="tk-card" onclick="viewTicket('${t.id}')">
+    <div class="tk-head">
+      <div><div class="tk-id">${t.id}</div><div class="tk-title">${t.title}</div></div>
+      <span class="tk-badge badge ${statusClass(t.status)}">${t.status}</span>
+    </div>
+    <div class="tk-meta">
+      <span>${t.requester?.name||''}</span><span>·</span>
+      <span>${fmtDate(t.createdAt||t.created_at)}</span><span>·</span>
+      <span>${cam?cam.name:'—'}</span>
+      <span class="tk-priority p-${t.priority.toLowerCase()}">${t.priority}</span>
+      ${tech?`<span style="color:var(--accent)">👷 ${tech.name.split(' ')[0]}</span>`:''}
+    </div>
+    <div class="tk-desc">${t.description}</div>
+  </div>`;
+}
+
+// ── USERS ─────────────────────────────────────────────────────────────────────
+function renderUsers(){
+  return `
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+    <div><div style="font-size:18px;font-weight:500">${USERS.length} usuário${USERS.length!==1?'s':''}</div></div>
+    <button class="btn btn-primary btn-sm" onclick="openUserModal(null)">${IC.plus} Novo Usuário</button>
+  </div>
+  <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:10px;overflow:hidden">
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="background:var(--bg4);border-bottom:1px solid rgba(202,157,74,.15)">
+        <th style="padding:12px 16px;text-align:left;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Usuário</th>
+        <th style="padding:12px 16px;text-align:left;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Contato</th>
+        <th style="padding:12px 16px;text-align:left;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Perfil</th>
+        <th style="padding:12px 16px;text-align:center;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Tickets</th>
+        <th style="padding:12px 16px;text-align:center;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Ações</th>
+      </tr></thead>
+      <tbody>
+        ${USERS.map(u=>`<tr style="border-bottom:1px solid rgba(202,157,74,.07)" onmouseover="this.style.background='rgba(202,157,74,.04)'" onmouseout="this.style.background='transparent'">
+          <td style="padding:14px 16px">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div class="avatar" style="width:36px;height:36px;font-size:12px">${u.avatar||makeAvatar(u.name)}</div>
+              <div><div style="font-weight:500;font-size:13px">${u.name}</div><div style="font-size:11px;color:var(--text-muted)">${u.email}</div></div>
+            </div>
+          </td>
+          <td style="padding:14px 16px"><div style="font-size:12px;color:var(--text-dim)">${u.phone||'—'}</div></td>
+          <td style="padding:14px 16px"><span class="badge ${roleClass(u.role)}">${roleLabel(u.role)}</span></td>
+          <td style="padding:14px 16px;text-align:center">
+            <div style="font-size:13px;font-weight:500">${tickets.filter(t=>t.techId===u.id||t.tech_id===u.id).length}</div>
+          </td>
+          <td style="padding:14px 16px;text-align:center">
+            <div style="display:flex;align-items:center;justify-content:center;gap:6px">
+              <button class="btn btn-ghost btn-sm" onclick="openUserModal('${u.id}')">${IC.edit} Editar</button>
+              ${u.id===currentUser.id?'<span style="font-size:10px;color:var(--text-muted)">você</span>':`<button class="btn btn-danger btn-sm" onclick="confirmDelete('${u.id}')">${IC.trash} Excluir</button>`}
+            </div>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+// ── MAP ───────────────────────────────────────────────────────────────────────
+function initMap(){
+  const el=document.getElementById('leaflet-map');
+  if(!el||leafletMap) return;
+  leafletMap=L.map('leaflet-map',{center:[-16.6795,-49.2736],zoom:13,zoomControl:true});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(leafletMap);
+  markersLayer=L.layerGroup().addTo(leafletMap);
+  renderMapMarkers();
+  leafletMap.fitBounds(L.latLngBounds(CAMERAS.map(c=>[c.lat,c.lng])),{padding:[40,40]});
+}
+function makeMarkerIcon(status){
+  const color=status==='online'?'#00e676':'#ff3d57';
+  const glow=status==='online'?'rgba(0,230,118,0.7)':'rgba(255,61,87,0.7)';
+  return L.divIcon({className:'',html:`<div style="filter:drop-shadow(0 0 4px ${glow})"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="${color}" opacity="0.2"/><circle cx="10" cy="10" r="5.5" fill="${color}"/><circle cx="10" cy="10" r="2.5" fill="#0a0d16"/></svg></div>`,iconSize:[20,20],iconAnchor:[10,10],popupAnchor:[0,-12]});
+}
+function renderMapMarkers(){
+  if(!markersLayer) return;
+  markersLayer.clearLayers();
+  let list=CAMERAS;
+  if(mapFilter==='online') list=list.filter(c=>c.status==='online');
+  if(mapFilter==='offline') list=list.filter(c=>c.status==='offline');
+  if(mapSearch){const q=mapSearch.toLowerCase();list=list.filter(c=>c.name.toLowerCase().includes(q)||c.address.toLowerCase().includes(q));}
+  const er=effRole();
+  list.forEach(cam=>{
+    const marker=L.marker([cam.lat,cam.lng],{icon:makeMarkerIcon(cam.status)});
+    const sc=cam.status==='online'?'pop-on':'pop-off';
+    const ticketBtn=(er==='admin'||er==='client')&&cam.status==='offline'
+      ?`<button class="pop-btn pop-btn-primary" onclick="selectedCam=CAMERAS.find(c=>c.id===${cam.id});openNewTicket()">🎫 Abrir Chamado</button>`
+      :`<button class="pop-btn pop-btn-ghost">✓ Operacional</button>`;
+    marker.bindPopup(`
+      <div class="pop-inner">
+        <div class="pop-head"><div class="pop-name">${cam.name}</div><span class="pop-badge ${sc}">${cam.status}</span></div>
+        <div class="pop-addr">📍 ${cam.address}</div>
+        <div class="pop-row"><strong>IP:</strong><span>${cam.ip||'—'}</span></div>
+        <div class="pop-row"><strong>Modelo:</strong><span style="font-family:inherit;color:var(--text-dim)">${cam.model||'—'}</span></div>
+      </div>
+      <div class="pop-foot">
+        <button class="pop-btn" style="background:var(--gold-grad);color:#0a0d16;font-weight:700" onclick="openGps(${cam.lat},${cam.lng},'${cam.name}')">🧭 Navegar até a Câmera</button>
+        <div class="pop-btn-row">${ticketBtn}<button class="pop-btn pop-btn-ghost" onclick="openCamHistory(${cam.id})">📋 Histórico</button></div>
+      </div>`,{maxWidth:260,minWidth:240});
+    marker.on('click',()=>{
+      selectedCam=cam;
+      const bar=document.getElementById('map-info-bar');
+      if(!bar) return;
+      const _tb=(er==='admin'||er==='client')&&cam.status==='offline'
+        ?'<button class="btn btn-danger btn-sm" onclick="selectedCam=CAMERAS.find(c=>c.id==='+cam.id+');openNewTicket()">🎫 Chamado</button>':'';
+      bar.innerHTML='<span class="mib-item"><strong>'+cam.name+'</strong></span>'
+        +'<span class="mib-item">📍 '+cam.address+'</span>'
+        +'<span class="mib-item" style="font-family:monospace;color:var(--accent)">'+cam.ip+'</span>'
+        +'<span class="mib-item"><span class="badge '+(cam.status==='online'?'cc-online':'cc-offline')+'">'+cam.status+'</span></span>'
+        +'<span style="margin-left:auto;display:flex;gap:6px">'
+        +'<button class="btn btn-ghost btn-sm" onclick="openCamHistory('+cam.id+')">📋 Histórico</button>'
+        +'<button class="btn btn-sm" style="background:var(--gold-grad);color:#0a0d16;font-weight:700" onclick="openGps('+cam.lat+','+cam.lng+',\'gps\')">🧭 GPS</button>'
+        +_tb+'</span>';
+    });
+    markersLayer.addLayer(marker);
+  });
+}
+function setMapFilter(f){mapFilter=f;renderMapMarkers();render();}
+function setMapSearch(v){mapSearch=v;renderMapMarkers();}
+function focusCam(id){const c=CAMERAS.find(x=>x.id===id);if(c&&leafletMap)leafletMap.setView([c.lat,c.lng],17,{animate:true});openCamHistory(id);}
+
+// ── TICKET MODAL ──────────────────────────────────────────────────────────────
+function renderTicketModal(){
+  const t=tickets.find(x=>x.id===openTicketId); if(!t) return '';
+  const cam=CAMERAS.find(c=>c.id===t.cameraId);
+  const er=effRole();
+  const isAdmin=er==='admin';
+  const isTech=currentUser.role==='tech'&&(t.techId===currentUser.id||t.tech_id===currentUser.id);
+  const STATUS_FLOW=['Aberto','Reconhecido','Técnico Designado','Agendado','Em Andamento','Finalizado'];
+  return `<div class="modal-overlay" onclick="if(event.target===this)closeTicket()">
+  <div class="modal" style="max-width:780px">
+    <div class="modal-head">
+      <div><div style="font-size:11px;color:var(--accent);font-family:monospace;margin-bottom:3px">${t.id}</div><div class="modal-title">${t.title}</div></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="badge ${statusClass(t.status)}">${t.status}</span>
+        <button class="icon-btn" onclick="closeTicket()">${IC.x}</button>
+      </div>
+    </div>
+    <div class="modal-body" style="display:grid;grid-template-columns:1fr 1fr;gap:22px">
+      <div>
+        <div style="font-size:11px;font-weight:500;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Informações</div>
+        <div class="info-row"><strong>Solicitante:</strong>${t.requester?.name||''}</div>
+        <div class="info-row"><strong>E-mail:</strong>${t.requester?.email||''}</div>
+        <div class="info-row"><strong>Telefone:</strong>${t.requester?.phone||''}</div>
+        <div class="info-row"><strong>Câmera:</strong>${cam?cam.name:'—'}</div>
+        <div class="info-row"><strong>Endereço:</strong>${cam?cam.address:'—'}</div>
+        <div class="info-row"><strong>Prioridade:</strong><span class="tk-priority p-${t.priority.toLowerCase()}">${t.priority}</span></div>
+        <div class="info-row"><strong>Aberto em:</strong>${fmtDate(t.createdAt||t.created_at)}</div>
+        ${(t.techId||t.tech_id)?`<div class="info-row"><strong>Técnico:</strong>${USERS.find(u=>u.id===(t.techId||t.tech_id))?.name||'—'}</div>`:''}
+        ${t.displacement?`<div class="info-row"><strong>Deslocamento:</strong>${t.displacement}</div>`:''}
+        ${cam?`<div style="margin-top:12px"><button class="btn btn-sm" style="background:var(--gold-grad);color:#0a0d16;font-weight:700" onclick="openGps(${cam.lat},${cam.lng},'${cam.name}')">${IC.nav} Navegar até a Câmera</button></div>`:''}
+        <div class="sep"></div>
+        <div style="font-size:11px;font-weight:500;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Descrição</div>
+        <p style="font-size:13px;color:var(--text);line-height:1.6">${t.description}</p>
+        ${renderTicketActions(t,isAdmin,isTech)}
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:500;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px">Linha do Tempo</div>
+        <div class="timeline">
+          ${(t.timeline||[]).map((e,i)=>{
+            const isLast=i===t.timeline.length-1;
+            const next=t.timeline[i+1];
+            const dur=next?timeDiff(e.date,next.date):null;
+            const dot=t.status==='Finalizado'?'tl-done':isLast?'tl-curr':'tl-done';
+            return `<div class="tl-item"><div class="tl-dot ${dot}"></div><div class="tl-status">${e.status}</div><div class="tl-note">${e.note}</div><div class="tl-meta">por ${e.user} · ${fmtDate(e.date)}</div>${dur?`<div class="tl-dur">⏱ ${dur} nesta etapa</div>`:''}</div>`;
+          }).join('')}
+          ${t.status!=='Finalizado'?`<div class="tl-item" style="opacity:.35"><div class="tl-dot tl-pend"></div><div class="tl-status">${STATUS_FLOW[STATUS_FLOW.indexOf(t.status)+1]||'—'}</div><div class="tl-note" style="color:var(--text-muted)">Aguardando...</div></div>`:''}
+        </div>
+      </div>
+    </div>
+  </div></div>`;
+}
+function renderTicketActions(t,isAdmin,isTech){
+  if(isAdmin&&t.status==='Aberto') return `<div style="margin-top:14px"><button class="btn btn-primary btn-sm" onclick="advanceTicket('${t.id}','Reconhecido','Chamado reconhecido pelo administrador.',{})">${IC.check} Reconhecer Chamado</button></div>`;
+  if(isAdmin&&t.status==='Reconhecido') return `<div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+    <div class="f-group"><label class="f-label">Técnico</label><select class="f-select" id="sel-tech"><option value="">Selecione...</option>${techs().map(tc=>`<option value="${tc.id}">${tc.name}</option>`).join('')}</select></div>
+    <div class="f-group"><label class="f-label">Deslocamento</label><select class="f-select" id="sel-disp"><option value="">Selecione...</option><option>Deslocar Agora</option><option>Agendar Visita</option></select></div>
+    <button class="btn btn-primary btn-sm" onclick="designarTecnico('${t.id}')">${IC.tool} Confirmar Designação</button>
+  </div>`;
+  if(isTech&&(t.status==='Técnico Designado'||t.status==='Agendado')) return `<div style="margin-top:14px"><button class="btn btn-primary btn-sm" onclick="advanceTicket('${t.id}','Em Andamento','Técnico iniciou o atendimento.',{})">${IC.tool} Iniciar Atendimento</button></div>`;
+  if(isTech&&t.status==='Em Andamento') return `<div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+    <div class="f-group"><label class="f-label">Causa</label><input class="f-input" id="tk-cause" placeholder="Causa do problema..."/></div>
+    <div class="f-group"><label class="f-label">Solução</label><textarea class="f-textarea" id="tk-solution" placeholder="Solução aplicada..."></textarea></div>
+    <div class="f-group"><label class="f-label">Imagens</label>
+      <label class="upload-zone">${IC.upload}<div style="font-size:12px;margin-top:6px">Clique para adicionar imagens</div><input type="file" accept="image/*" multiple style="display:none" onchange="previewImgs(this)"/></label>
+      <div class="img-previews" id="img-prev"></div>
+    </div>
+    <button class="btn btn-success btn-sm" onclick="finalizarTicket('${t.id}')">${IC.check} Finalizar Ticket</button>
+  </div>`;
+  return '';
+}
+
+function renderNewTicketModal(){
+  return `<div class="modal-overlay" onclick="if(event.target===this)closeNewTicket()">
+  <div class="modal" style="max-width:580px">
+    <div class="modal-head"><div class="modal-title">${IC.plus} Abrir Novo Chamado</div><button class="icon-btn" onclick="closeNewTicket()">${IC.x}</button></div>
+    <div class="modal-body">
+      <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.1);border-radius:8px;padding:12px;margin-bottom:16px">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Solicitante</div>
+        <div class="info-row"><strong>Nome:</strong>${currentUser.name}</div>
+        <div class="info-row"><strong>E-mail:</strong>${currentUser.email}</div>
+        <div class="info-row"><strong>Telefone:</strong>${currentUser.phone||'—'}</div>
+      </div>
+      <div class="f-group" style="margin-bottom:12px"><label class="f-label">Câmera</label>
+        <select class="f-select" id="nt-cam"><option value="">Selecione...</option>${CAMERAS.map(c=>`<option value="${c.id}" ${selectedCam&&selectedCam.id===c.id?'selected':''}>${c.name} — ${c.address}</option>`).join('')}</select>
+      </div>
+      <div class="f-group" style="margin-bottom:12px"><label class="f-label">Prioridade</label>
+        <select class="f-select" id="nt-pri"><option>Alta</option><option selected>Média</option><option>Baixa</option></select>
+      </div>
+      <div class="f-group"><label class="f-label">Descrição</label>
+        <textarea class="f-textarea" id="nt-desc" placeholder="Descreva o problema..."></textarea>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeNewTicket()">Cancelar</button><button class="btn btn-primary" onclick="submitNewTicket()">${IC.plus} Abrir Chamado</button></div>
+  </div></div>`;
+}
+
+// ── CAMERA HISTORY MODAL ──────────────────────────────────────────────────────
+let CAM_HISTORY={};
+function buildCamHistory(){
+  CAM_HISTORY={};
+  tickets.filter(t=>t.status==='Finalizado').forEach(t=>{
+    const cid=t.cameraId||t.camera_id;
+    if(!CAM_HISTORY[cid]) CAM_HISTORY[cid]=[];
+    const last=t.timeline[t.timeline.length-1];
+    const tech=USERS.find(u=>u.id===(t.techId||t.tech_id));
+    const note=last?.note||'';
+    const causeMatch=note.match(/Causa: (.+?) \| Solução:/);
+    const solMatch=note.match(/Solução: (.+)$/);
+    CAM_HISTORY[cid].push({ticketId:t.id,date:last?.date||t.createdAt,techName:tech?.name||'Não informado',techAvatar:tech?.avatar||'??',cause:causeMatch?causeMatch[1]:note,solution:solMatch?solMatch[1]:'',priority:t.priority,images:t.images||[],duration:t.timeline.length>1?timeDiff(t.timeline[0].date,last.date):'—'});
+  });
+  Object.keys(CAM_HISTORY).forEach(k=>CAM_HISTORY[k].sort((a,b)=>new Date(b.date)-new Date(a.date)));
+}
+function openCamHistory(camId){buildCamHistory();camHistoryId=camId;render();}
+function closeCamHistory(){camHistoryId=null;render();}
+function renderCamHistoryModal(){
+  const cam=CAMERAS.find(c=>c.id===camHistoryId); if(!cam) return '';
+  const visits=CAM_HISTORY[camHistoryId]||[];
+  const last=visits[0];
+  return `<div class="modal-overlay" onclick="if(event.target===this)closeCamHistory()">
+  <div class="modal" style="max-width:760px">
+    <div class="modal-head">
+      <div><div style="font-size:11px;color:var(--accent);font-family:monospace;margin-bottom:3px">${cam.name}</div><div class="modal-title">Histórico de Visitas Técnicas</div></div>
+      <div style="display:flex;align-items:center;gap:10px"><span class="badge ${cam.status==='online'?'cc-online':'cc-offline'}">${cam.status}</span><button class="icon-btn" onclick="closeCamHistory()">${IC.x}</button></div>
+    </div>
+    <div style="padding:12px 22px;background:var(--bg3);border-bottom:1px solid rgba(202,157,74,.15);display:flex;gap:20px;flex-wrap:wrap">
+      <div class="info-row" style="padding:0"><strong style="min-width:80px">Endereço:</strong>${cam.address}</div>
+      <div class="info-row" style="padding:0"><strong style="min-width:40px">IP:</strong><span style="font-family:monospace;color:var(--accent)">${cam.ip||'—'}</span></div>
+      ${last?`<div class="info-row" style="padding:0;margin-left:auto"><strong style="min-width:100px">Última visita:</strong><span style="color:var(--green)">${fmtDate(last.date)}</span></div>`:''}
+    </div>
+    <div class="modal-body">
+      ${visits.length===0?`<div class="empty" style="padding:40px 0"><div style="font-size:36px;margin-bottom:12px">📋</div><div style="font-size:14px;font-weight:500;color:var(--text)">Nenhuma visita técnica registrada</div></div>`:`
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">
+        <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:300;color:var(--accent)">${visits.length}</div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-top:3px">Visitas Totais</div></div>
+        <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:8px;padding:12px;text-align:center"><div style="font-size:13px;font-weight:500;color:var(--text);margin-top:4px">${last?fmtDate(last.date):'—'}</div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-top:3px">Última Visita</div></div>
+        <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:8px;padding:12px;text-align:center"><div style="font-size:13px;font-weight:500;color:var(--text);margin-top:4px">${last?last.techName:'—'}</div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-top:3px">Último Técnico</div></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        ${visits.map((v,i)=>`<div style="background:var(--bg3);border:1px solid rgba(202,157,74,${i===0?'.25':'.08'});border-radius:10px;overflow:hidden">
+          <div style="padding:12px 16px;border-bottom:1px solid rgba(202,157,74,.1);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;${i===0?'background:rgba(202,157,74,.05)':''}">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div class="avatar" style="width:34px;height:34px;font-size:11px">${v.techAvatar}</div>
+              <div><div style="font-size:13px;font-weight:500">${v.techName}</div><div style="font-size:11px;color:var(--text-muted)">${fmtDate(v.date)}</div></div>
+              ${i===0?'<span style="font-size:10px;background:rgba(202,157,74,.15);color:var(--accent);padding:2px 8px;border-radius:10px">RECENTE</span>':''}
+            </div>
+            <div style="display:flex;gap:8px;align-items:center"><span class="tk-priority p-${v.priority.toLowerCase()}">${v.priority}</span><span style="font-size:11px;color:var(--text-muted);font-family:monospace">${v.ticketId}</span><span style="font-size:11px;color:var(--text-muted)">⏱ ${v.duration}</span></div>
+          </div>
+          <div style="padding:14px 16px;display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <div><div style="font-size:10px;font-weight:500;color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px">Causa</div><div style="font-size:13px;color:var(--text);line-height:1.6;background:rgba(255,61,87,.06);border:1px solid rgba(255,61,87,.15);border-radius:6px;padding:10px">${v.cause||'Não informado'}</div></div>
+            <div><div style="font-size:10px;font-weight:500;color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px">Solução</div><div style="font-size:13px;color:var(--text);line-height:1.6;background:rgba(0,230,118,.05);border:1px solid rgba(0,230,118,.15);border-radius:6px;padding:10px">${v.solution||'Não informado'}</div></div>
+          </div>
+          ${v.images&&v.images.length>0?`<div style="padding:0 16px 14px"><div style="font-size:10px;font-weight:500;color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">Fotos (${v.images.length})</div><div class="img-previews">${v.images.map(img=>`<img src="${img}" class="img-thumb" onclick="previewImg='${img}';render()"/>`).join('')}</div></div>`:''}
+        </div>`).join('')}
+      </div>`}
+    </div>
+    <div class="modal-foot" style="justify-content:space-between">
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="closeCamHistory();selectedCam=CAMERAS.find(c=>c.id===${cam.id});openNewTicket()">${IC.plus} Novo Chamado</button>
+        <button class="btn btn-sm" style="background:var(--gold-grad);color:#0a0d16;font-weight:700" onclick="openGps(${cam.lat},${cam.lng},'${cam.name}')">${IC.nav} Navegar</button>
+      </div>
+      <button class="btn btn-ghost" onclick="closeCamHistory()">Fechar</button>
+    </div>
+  </div></div>`;
+}
+function renderImgPreview(){
+  return `<div class="modal-overlay" style="z-index:2000;background:rgba(0,0,0,.92)" onclick="previewImg=null;render()">
+    <img src="${previewImg}" style="max-width:90vw;max-height:85vh;object-fit:contain;border-radius:8px"/>
+    <button class="icon-btn" style="position:fixed;top:20px;right:20px;background:rgba(255,255,255,.1);border-radius:50%;padding:8px;width:36px;height:36px" onclick="previewImg=null;render()">${IC.x}</button>
+  </div>`;
+}
+
+// ── USER MODAL ────────────────────────────────────────────────────────────────
+function openUserModal(id){editUserId=id;showUserModal=true;render();}
+function closeUserModal(){showUserModal=false;editUserId=null;render();}
+function confirmDelete(id){deleteUserId=id;render();}
+function cancelDelete(){deleteUserId=null;render();}
+function renderUserModal(){
+  const isNew=editUserId===null;
+  const u=isNew?null:USERS.find(x=>x.id===editUserId);
+  return `<div class="modal-overlay" onclick="if(event.target===this)closeUserModal()">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-head"><div class="modal-title">${isNew?IC.plus+' Novo Usuário':'Editar Usuário'}</div><button class="icon-btn" onclick="closeUserModal()">${IC.x}</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="f-group fg-full"><label class="f-label">Nome Completo</label><input class="f-input" id="um-name" placeholder="Nome completo" value="${u?u.name:''}"/></div>
+        <div class="f-group"><label class="f-label">E-mail</label><input class="f-input" id="um-email" type="email" placeholder="email@empresa.com" value="${u?u.email:''}"/></div>
+        <div class="f-group"><label class="f-label">Telefone</label><input class="f-input" id="um-phone" placeholder="(62) 9xxxx-xxxx" value="${u?u.phone:''}"/></div>
+        <div class="f-group"><label class="f-label">Perfil</label>
+          <select class="f-select" id="um-role">
+            <option value="admin" ${u&&u.role==='admin'?'selected':''}>Administrador</option>
+            <option value="tech" ${u&&u.role==='tech'?'selected':''}>Técnico</option>
+            <option value="client" ${!u||u.role==='client'?'selected':''}>Cliente</option>
+          </select>
+        </div>
+        <div class="f-group"><label class="f-label">${isNew?'Senha':'Nova Senha (opcional)'}</label><input class="f-input" id="um-pass" type="password" placeholder="${isNew?'Mínimo 6 caracteres':'Deixe em branco para manter'}"/></div>
+        <div class="f-group"><label class="f-label">Confirmar Senha</label><input class="f-input" id="um-pass2" type="password" placeholder="Repita a senha"/></div>
+      </div>
+      <div id="um-error" style="display:none;margin-top:14px;padding:10px;background:rgba(255,61,87,.1);border:1px solid rgba(255,61,87,.3);border-radius:6px;font-size:13px;color:var(--red)"></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeUserModal()">Cancelar</button><button class="btn btn-primary" onclick="saveUser(${isNew?'null':"'"+editUserId+"'"})">${isNew?IC.plus+' Criar':IC.check+' Salvar'}</button></div>
+  </div></div>`;
+}
+function renderDeleteConfirm(){
+  const u=USERS.find(x=>x.id===deleteUserId); if(!u) return '';
+  const hasTks=tickets.filter(t=>(t.techId===u.id||t.tech_id===u.id)&&t.status!=='Finalizado').length;
+  return `<div class="modal-overlay" onclick="if(event.target===this)cancelDelete()">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-head"><div class="modal-title" style="color:var(--red)">Excluir Usuário</div><button class="icon-btn" onclick="cancelDelete()">${IC.x}</button></div>
+    <div class="modal-body" style="text-align:center;padding:28px 24px">
+      <div style="font-size:16px;font-weight:500;margin-bottom:8px">Excluir <strong>${u.name}</strong>?</div>
+      <div style="font-size:13px;color:var(--text-muted)">Esta ação não pode ser desfeita.</div>
+      ${hasTks>0?`<div style="margin-top:12px;padding:10px;background:rgba(255,196,0,.08);border:1px solid rgba(255,196,0,.3);border-radius:6px;font-size:12px;color:var(--yellow)">⚠ ${hasTks} ticket${hasTks>1?'s':''} em aberto ficarão sem técnico.</div>`:''}
+    </div>
+    <div class="modal-foot" style="justify-content:space-between">
+      <button class="btn btn-ghost" onclick="cancelDelete()">Cancelar</button>
+      <button class="btn btn-danger" onclick="deleteUserAction()">${IC.trash} Confirmar Exclusão</button>
+    </div>
+  </div></div>`;
+}
+
+// ── IMPORT KMZ ────────────────────────────────────────────────────────────────
+let importState={status:'idle',log:[],cameras:null};
+function openImportModal(){importState={status:'idle',log:[],cameras:null};showImportModal=true;render();}
+function closeImportModal(){showImportModal=false;importState={status:'idle',log:[],cameras:null};render();}
+function renderImportModal(){
+  const s=importState;
+  const on=s.cameras?s.cameras.filter(c=>c.status==='online').length:0;
+  const off=s.cameras?s.cameras.filter(c=>c.status==='offline').length:0;
+  return `<div class="modal-overlay" onclick="if(event.target===this)closeImportModal()">
+  <div class="modal" style="max-width:620px">
+    <div class="modal-head"><div class="modal-title">⬆ Importar KMZ</div><button class="icon-btn" onclick="closeImportModal()">${IC.x}</button></div>
+    <div class="modal-body" style="min-height:200px">
+      ${s.status==='idle'?`<label class="upload-zone" style="display:block;cursor:pointer">
+        <input type="file" accept=".kmz,.kml" style="display:none" onchange="handleKmzFile(this.files[0])"/>
+        <div style="font-size:36px;margin-bottom:10px">📂</div>
+        <div style="font-size:14px;font-weight:500;color:var(--text)">Clique para selecionar o arquivo KMZ</div>
+        <div style="font-size:12px;margin-top:4px;color:var(--text-muted)">icon-ci-1 = vermelho (offline) · icon-ci-2 = verde (online)</div>
+      </label>`:''}
+      ${s.status==='loading'?`<div style="text-align:center;padding:40px 0"><div style="font-size:36px;margin-bottom:12px" class="pulse">⚙️</div><div style="font-size:14px;font-weight:500;margin-bottom:16px">Processando...</div><div style="background:var(--bg3);border-radius:8px;padding:12px;text-align:left;max-height:120px;overflow-y:auto">${s.log.map(l=>`<div style="font-size:11px;color:var(--text-dim);font-family:monospace;margin-bottom:2px">${l}</div>`).join('')}</div></div>`:''}
+      ${s.status==='preview'&&s.cameras?`<div>
+        <div style="font-size:13px;font-weight:500;margin-bottom:12px">📊 Prévia:</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center"><div style="font-size:26px;font-weight:300">${s.cameras.length}</div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Total</div></div>
+          <div style="background:var(--bg3);border:1px solid rgba(0,230,118,.3);border-radius:8px;padding:14px;text-align:center"><div style="font-size:26px;font-weight:300;color:var(--green)">${on}</div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Online</div></div>
+          <div style="background:var(--bg3);border:1px solid rgba(255,61,87,.3);border-radius:8px;padding:14px;text-align:center"><div style="font-size:26px;font-weight:300;color:var(--red)">${off}</div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Offline</div></div>
+        </div>
+        <div style="padding:10px 14px;background:rgba(255,196,0,.07);border:1px solid rgba(255,196,0,.3);border-radius:6px;font-size:12px;color:var(--yellow)">⚠ Substituirá as ${CAMERAS.length} câmeras atuais pelas ${s.cameras.length} do novo arquivo.</div>
+      </div>`:''}
+      ${s.status==='error'?`<div style="text-align:center;padding:40px 0"><div style="font-size:40px;margin-bottom:14px">❌</div><div style="font-size:14px;font-weight:500;color:var(--red)">Erro ao processar arquivo</div><div style="font-size:12px;color:var(--text-muted);margin-top:8px">${s.log[s.log.length-1]||''}</div><button class="btn btn-ghost btn-sm" style="margin-top:18px" onclick="importState={status:'idle',log:[],cameras:null};render()">Tentar novamente</button></div>`:''}
+      ${s.status==='done'?`<div style="text-align:center;padding:40px 0"><div style="font-size:40px;margin-bottom:14px">✅</div><div style="font-size:14px;font-weight:500;color:var(--green)">Importação concluída!</div><div style="font-size:12px;color:var(--text-dim);margin-top:8px">${s.cameras.length} câmeras carregadas</div></div>`:''}
+    </div>
+    ${s.status==='preview'?`<div class="modal-foot"><button class="btn btn-ghost" onclick="importState.status='idle';render()">← Voltar</button><button class="btn btn-primary" onclick="applyImport()">✓ Confirmar</button></div>`:''}
+    ${s.status==='done'?`<div class="modal-foot"><button class="btn btn-primary" onclick="closeImportModal()">Fechar</button></div>`:''}
+  </div></div>`;
+}
+function handleKmzFile(file){
+  if(!file) return;
+  importState={status:'loading',log:['📂 '+file.name+' ('+( file.size/1024).toFixed(1)+' KB)'],cameras:null};
+  render();
+  const reader=new FileReader();
+  reader.onload=async(e)=>{
+    try{
+      let kmlText='';
+      if(file.name.toLowerCase().endsWith('.kmz')){
+        importState.log.push('📦 Descompactando...');
+        const zip=await JSZip.loadAsync(e.target.result);
+        const kmlFile=zip.file(/\.kml$/i)[0];
+        if(!kmlFile) throw new Error('Nenhum .kml encontrado');
+        kmlText=await kmlFile.async('text');
+        importState.log.push('✓ KML extraído');
+      } else { kmlText=new TextDecoder().decode(e.target.result); }
+      importState.log.push('🔍 Analisando marcadores...');
+      const cameras=parseKml(kmlText);
+      if(!cameras||cameras.length===0) throw new Error('Nenhum marcador encontrado');
+      importState.log.push('✓ '+cameras.length+' câmeras encontradas');
+      importState.status='preview'; importState.cameras=cameras; render();
+    } catch(err){ importState.status='error'; importState.log.push('❌ '+err.message); render(); }
+  };
+  reader.onerror=()=>{importState.status='error';importState.log.push('❌ Erro ao ler');render();};
+  reader.readAsArrayBuffer(file);
+}
+function parseKml(kmlText){
+  const doc=new DOMParser().parseFromString(kmlText,'text/xml');
+  const styleMap={};
+  doc.querySelectorAll('Style').forEach(s=>{
+    const id='#'+(s.getAttribute('id')||'');
+    const href=s.querySelector('href')?.textContent||'';
+    if(id.includes('ci-2')||href.includes('icon-2')) styleMap[id]='online';
+    else if(id.includes('ci-1')||href.includes('icon-1')) styleMap[id]='offline';
+  });
+  const cameras=[];
+  doc.querySelectorAll('Placemark').forEach((pm,i)=>{
+    const name=pm.querySelector('name')?.textContent?.trim()||'Ponto '+(i+1);
+    const style=pm.querySelector('styleUrl')?.textContent?.trim()||'';
+    const coordStr=pm.querySelector('coordinates')?.textContent?.trim();
+    if(!coordStr) return;
+    const parts=coordStr.split(',');
+    const lng=parseFloat(parts[0]),lat=parseFloat(parts[1]);
+    if(isNaN(lat)||isNaN(lng)) return;
+    let status=styleMap[style]||(style.includes('ci-1')?'offline':style.includes('ci-2')?'online':'online');
+    const nameParts=name.split(' - ');
+    const pnum=nameParts[0].replace('Ponto','').trim();
+    const addr=nameParts.length>1?nameParts.slice(1).join(' - '):name;
+    cameras.push({id:i+1,name:'CAM-'+String(pnum).padStart(3,'0'),address:addr,lat,lng,status,ip:'192.168.'+(Math.floor(i/254)+1)+'.'+(i%254+1),model:'Intelbras/Hikvision',location:addr});
+  });
+  return cameras;
+}
+async function applyImport(){
+  if(!importState.cameras||!importState.cameras.length) return;
+  CAMERAS.length=0;
+  importState.cameras.forEach(c=>CAMERAS.push(c));
+  // Sync to Supabase
+  try {
+    setLoading(true);
+    // Delete all existing cameras and reinsert
+    await sbDelete('cameras','id=gte.0');
+    const chunks=[];
+    for(let i=0;i<CAMERAS.length;i+=50) chunks.push(CAMERAS.slice(i,i+50));
+    for(const chunk of chunks){
+      await sbPost('cameras', chunk.map(c=>({id:c.id,name:c.name,address:c.address,lat:c.lat,lng:c.lng,status:c.status,ip:c.ip,model:c.model,location:c.location})));
+    }
+    setLoading(false);
+    showToast('✓ '+CAMERAS.length+' câmeras sincronizadas com o banco!');
+  } catch(e){
+    setLoading(false);
+    showToast('⚠ Câmeras atualizadas localmente (erro ao sincronizar BD)');
+  }
+  leafletMap=null; markersLayer=null;
+  importState.status='done'; render();
+}
+
+// ── ACTIONS ───────────────────────────────────────────────────────────────────
+function goPage(p){page=p;leafletMap=null;markersLayer=null;camFilter='all';camSearch='';render();}
+function setView(v){viewAs=v;render();}
+function viewTicket(id){openTicketId=id;render();}
+function closeTicket(){openTicketId=null;render();}
+function openNewTicket(){showNewTicket=true;render();}
+function closeNewTicket(){showNewTicket=false;render();}
+
+async function advanceTicket(id,status,note,extra){
+  const t=tickets.find(x=>x.id===id); if(!t) return;
+  const newEntry={status,date:new Date().toISOString(),user:currentUser.name,note};
+  const newTimeline=[...(t.timeline||[]),newEntry];
+  try {
+    await sbPatch('tickets','id=eq.'+id,{status,...extra,timeline:newTimeline,updated_at:new Date().toISOString()});
+    tickets=tickets.map(tk=>tk.id!==id?tk:{...tk,status,...extra,timeline:newTimeline});
+    showToast('✓ Ticket atualizado');
+  } catch(e){
+    tickets=tickets.map(tk=>tk.id!==id?tk:{...tk,status,...extra,timeline:newTimeline});
+    showToast('⚠ Salvo localmente');
+  }
+  openTicketId=id; render();
+}
+
+async function designarTecnico(id){
+  const techId=document.getElementById('sel-tech').value;
+  const disp=document.getElementById('sel-disp').value;
+  if(!techId||!disp){alert('Selecione técnico e deslocamento.');return;}
+  const tech=USERS.find(u=>u.id===techId);
+  const newStatus=disp==='Agendar Visita'?'Agendado':'Técnico Designado';
+  await advanceTicket(id,newStatus,tech.name+' designado. '+disp+'.',{tech_id:techId,techId,displacement:disp});
+}
+
+async function finalizarTicket(id){
+  const cause=document.getElementById('tk-cause')?.value;
+  const sol=document.getElementById('tk-solution')?.value;
+  if(!cause||!sol){alert('Preencha causa e solução.');return;}
+  const imgs=[...document.querySelectorAll('#img-prev .img-thumb')].map(i=>i.src);
+  tickets=tickets.map(t=>t.id!==id?t:{...t,images:imgs});
+  await advanceTicket(id,'Finalizado','Causa: '+cause+' | Solução: '+sol,{images:imgs});
+}
+
+function previewImgs(input){
+  const prev=document.getElementById('img-prev');if(!prev)return;
+  Array.from(input.files).forEach(f=>{const r=new FileReader();r.onload=e=>{const img=document.createElement('img');img.src=e.target.result;img.className='img-thumb';prev.appendChild(img);};r.readAsDataURL(f);});
+}
+
+async function submitNewTicket(){
+  const camId=parseInt(document.getElementById('nt-cam').value);
+  const desc=document.getElementById('nt-desc').value.trim();
+  const pri=document.getElementById('nt-pri').value;
+  if(!camId||!desc){alert('Selecione a câmera e descreva o problema.');return;}
+  const cam=CAMERAS.find(c=>c.id===camId);
+  const now=new Date().toISOString();
+  const tkId='TK-'+String(tickets.length+1).padStart(3,'0');
+  const newTk={id:tkId,title:'Chamado - '+cam.name,camera_id:camId,status:'Aberto',priority:pri,requester_name:currentUser.name,requester_email:currentUser.email,requester_phone:currentUser.phone||'',description:desc,tech_id:null,displacement:null,images:[],timeline:[{status:'Aberto',date:now,user:currentUser.name,note:'Ticket aberto.'}],created_at:now,updated_at:now};
+  try {
+    const [saved]=await sbPost('tickets',newTk);
+    tickets=[normalizeTicket(saved),...tickets];
+    showToast('✓ Chamado aberto com sucesso!');
+  } catch(e){
+    tickets=[normalizeTicket(newTk),...tickets];
+    showToast('⚠ Chamado salvo localmente');
+  }
+  showNewTicket=false; page='tickets'; render();
+}
+
+async function saveUser(id){
+  const name=document.getElementById('um-name').value.trim();
+  const email=document.getElementById('um-email').value.trim();
+  const phone=document.getElementById('um-phone').value.trim();
+  const role=document.getElementById('um-role').value;
+  const pass=document.getElementById('um-pass').value;
+  const pass2=document.getElementById('um-pass2').value;
+  const errEl=document.getElementById('um-error');
+  const showErr=msg=>{errEl.textContent=msg;errEl.style.display='block';};
+  errEl.style.display='none';
+  if(!name) return showErr('Nome obrigatório.');
+  if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showErr('E-mail inválido.');
+  const isNew=id===null;
+  if(isNew&&!pass) return showErr('Senha obrigatória.');
+  if(pass&&pass.length<6) return showErr('Mínimo 6 caracteres.');
+  if(pass&&pass!==pass2) return showErr('Senhas não coincidem.');
+  if(USERS.find(u=>u.email===email&&u.id!==id)) return showErr('E-mail já cadastrado.');
+  const avatar=makeAvatar(name);
+  try {
+    if(isNew){
+      const [saved]=await sbPost('users',{name,email,phone,role,password_hash:pass,avatar});
+      USERS=[...USERS,saved];
+    } else {
+      const upd={name,email,phone,role,avatar};
+      if(pass) upd.password_hash=pass;
+      const [saved]=await sbPatch('users','id=eq.'+id,upd);
+      USERS=USERS.map(u=>u.id!==id?u:{...u,...saved});
+      if(currentUser.id===id) currentUser=USERS.find(u=>u.id===id);
+    }
+    showToast('✓ Usuário salvo!');
+  } catch(e){
+    if(isNew) USERS=[...USERS,{id:'local-'+Date.now(),name,email,phone,role,password_hash:pass,avatar}];
+    else USERS=USERS.map(u=>u.id!==id?u:{...u,name,email,phone,role,avatar,...(pass?{password_hash:pass}:{})});
+    showToast('⚠ Salvo localmente');
+  }
+  closeUserModal();
+}
+
+async function deleteUserAction(){
+  try {
+    await sbDelete('users','id=eq.'+deleteUserId);
+    showToast('✓ Usuário excluído');
+  } catch(e){ showToast('⚠ Removido localmente'); }
+  USERS=USERS.filter(u=>u.id!==deleteUserId);
+  tickets=tickets.map(t=>t.tech_id===deleteUserId?{...t,tech_id:null,techId:null}:t);
+  deleteUserId=null; render();
+}
+
+async function reloadData(){
+  showToast('🔄 Atualizando dados...');
+  try {
+    USERS=await sbGet('users','select=*&order=created_at.asc');
+    const rawTks=await sbGet('tickets','select=*&order=created_at.desc');
+    tickets=rawTks.map(normalizeTicket);
+    try {
+      const dbCams=await sbGet('cameras','select=*&order=id.asc');
+      if(dbCams&&dbCams.length>0) CAMERAS=dbCams.map(c=>({...c,model:c.model||'Intelbras/Hikvision'}));
+    } catch(e){}
+    leafletMap=null; markersLayer=null;
+    showToast('✓ Dados atualizados!');
+    render();
+  } catch(e){ showToast('❌ Erro ao atualizar: '+e.message); }
+}
+
+function bindKeys(){
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){
+      if(previewImg){previewImg=null;render();}
+      else if(openTicketId){closeTicket();}
+      else if(showNewTicket){closeNewTicket();}
+      else if(camHistoryId){closeCamHistory();}
+      else if(showImportModal){closeImportModal();}
+      else if(showUserModal){closeUserModal();}
+      else if(deleteUserId){cancelDelete();}
+    }
+  },{once:true});
+}
+
+// ── BOOT ─────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
