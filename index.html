@@ -161,6 +161,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Roboto
 .s-agendado{background:rgba(167,139,250,.12);color:var(--purple);}
 .s-andamento{background:rgba(255,196,0,.1);color:var(--yellow);}
 .s-finalizado{background:rgba(0,230,118,.1);color:var(--green);}
+.s-pendente{background:rgba(167,139,250,.12);color:#c084fc;}
 
 /* FORM */
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
@@ -531,7 +532,7 @@ let mapFilter = 'all', mapSearch = '', camFilter = 'all', camSearch = '';
 // ── HELPERS ──────────────────────────────────────────────────────────────────
 const fmtDate  = d => new Date(d).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
 const timeDiff = (a,b) => {const ms=new Date(b)-new Date(a),h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000);return h>24?Math.floor(h/24)+'d '+h%24+'h':h>0?h+'h '+m+'min':m+'min';};
-const statusClass = s => ({'Aberto':'s-aberto','Reconhecido':'s-reconhecido','Técnico Designado':'s-tecnico','Agendado':'s-agendado','Em Andamento':'s-andamento','Finalizado':'s-finalizado'}[s]||'s-aberto');
+const statusClass = s => ({'Aberto':'s-aberto','Reconhecido':'s-reconhecido','Pendente':'s-pendente','Técnico Designado':'s-tecnico','Agendado':'s-agendado','Em Andamento':'s-andamento','Finalizado':'s-finalizado'}[s]||'s-aberto');
 const effRole   = () => currentUser.role==='admin' ? viewAs : currentUser.role;
 const openTks   = () => tickets.filter(t=>t.status!=='Finalizado');
 const myTks     = () => currentUser.role==='tech' ? tickets.filter(t=>t.tech_id===currentUser.id) : tickets;
@@ -831,7 +832,7 @@ function renderCameras(){
 function renderTickets(){
   const er=effRole();
   const list=er==='tech'?myTks():tickets;
-  const STATUS_FLOW=['Aberto','Reconhecido','Técnico Designado','Agendado','Em Andamento','Finalizado'];
+  const STATUS_FLOW=['Aberto','Reconhecido','Pendente','Técnico Designado','Agendado','Em Andamento','Finalizado'];
   return `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
     <div class="tag-strip">${list.length>0?STATUS_FLOW.map(s=>{const n=list.filter(t=>t.status===s).length;return n>0?`<span class="badge ${statusClass(s)}">${s}: ${n}</span>`:''}).join(''):'<span style="font-size:12px;color:var(--text-muted)">Nenhum chamado</span>'}</div>
@@ -1032,7 +1033,7 @@ function renderTicketModal(){
   const er=effRole();
   const isAdmin=er==='admin';
   const isTech=currentUser.role==='tech'&&(t.techId===currentUser.id||t.tech_id===currentUser.id);
-  const STATUS_FLOW=['Aberto','Reconhecido','Técnico Designado','Agendado','Em Andamento','Finalizado'];
+  const STATUS_FLOW=['Aberto','Reconhecido','Pendente','Técnico Designado','Agendado','Em Andamento','Finalizado'];
   return `<div class="modal-overlay" onclick="if(event.target===this)closeTicket()">
   <div class="modal" style="max-width:780px">
     <div class="modal-head">
@@ -1079,9 +1080,27 @@ function renderTicketModal(){
 function renderTicketActions(t,isAdmin,isTech){
   if(isAdmin&&t.status==='Aberto') return `<div style="margin-top:14px"><button class="btn btn-primary btn-sm" onclick="advanceTicket('${t.id}','Reconhecido','Chamado reconhecido pelo administrador.',{})">${IC.check} Reconhecer Chamado</button></div>`;
   if(isAdmin&&t.status==='Reconhecido') return `<div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
-    <div class="f-group"><label class="f-label">Técnico</label><select class="f-select" id="sel-tech"><option value="">Selecione...</option>${techs().map(tc=>`<option value="${tc.id}">${tc.name}</option>`).join('')}</select></div>
-    <div class="f-group"><label class="f-label">Deslocamento</label><select class="f-select" id="sel-disp"><option value="">Selecione...</option><option>Deslocar Agora</option><option>Agendar Visita</option></select></div>
-    <button class="btn btn-primary btn-sm" onclick="designarTecnico('${t.id}')">${IC.tool} Confirmar Designação</button>
+    <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.15);border-radius:8px;padding:12px">
+      <div style="font-size:11px;font-weight:500;color:var(--accent);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Designar Técnico</div>
+      <div class="f-group"><label class="f-label">Técnico</label><select class="f-select" id="sel-tech"><option value="">Selecione...</option>${techs().map(tc=>`<option value="${tc.id}">${tc.name}</option>`).join('')}</select></div>
+      <div class="f-group"><label class="f-label">Deslocamento</label><select class="f-select" id="sel-disp"><option value="">Selecione...</option><option>Deslocar Agora</option><option>Agendar Visita</option></select></div>
+      <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center" onclick="designarTecnico('${t.id}')">${IC.tool} Confirmar Designação</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;color:var(--text-muted);font-size:11px"><div style="flex:1;height:1px;background:var(--border)"></div>ou<div style="flex:1;height:1px;background:var(--border)"></div></div>
+    <div style="background:rgba(192,132,252,.06);border:1px solid rgba(192,132,252,.2);border-radius:8px;padding:12px">
+      <div style="font-size:11px;font-weight:500;color:#c084fc;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">⏸ Colocar em Pendência</div>
+      <div class="f-group"><label class="f-label">Motivo da Pendência</label>
+        <textarea class="f-textarea" id="pend-motivo" placeholder="Descreva o motivo da pendência (ex: aguardando peça, aguardando acesso ao local, aguardando autorização...)" style="min-height:80px;border-color:rgba(192,132,252,.3)"></textarea>
+      </div>
+      <button class="btn btn-sm" style="width:100%;justify-content:center;background:rgba(192,132,252,.12);color:#c084fc;border:1px solid rgba(192,132,252,.3)" onclick="colocarPendente('${t.id}')">⏸ Confirmar Pendência</button>
+    </div>
+  </div>`;
+  if(isAdmin&&t.status==='Pendente') return `<div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+    <div style="background:rgba(192,132,252,.06);border:1px solid rgba(192,132,252,.2);border-radius:8px;padding:12px">
+      <div style="font-size:11px;font-weight:500;color:#c084fc;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">⏸ Em Pendência</div>
+      ${t.pendMotivo?`<div style="font-size:13px;color:var(--text);line-height:1.6;background:rgba(192,132,252,.08);border-radius:6px;padding:8px 10px;margin-bottom:10px">${t.pendMotivo}</div>`:''}
+      <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center" onclick="advanceTicket('${t.id}','Reconhecido','Pendência resolvida. Chamado retomado pelo administrador.',{pendMotivo:null})">${IC.check} Resolver Pendência e Retomar</button>
+    </div>
   </div>`;
   if(isTech&&(t.status==='Técnico Designado'||t.status==='Agendado')) return `<div style="margin-top:14px"><button class="btn btn-primary btn-sm" onclick="advanceTicket('${t.id}','Em Andamento','Técnico iniciou o atendimento.',{})">${IC.tool} Iniciar Atendimento</button></div>`;
   if(isTech&&t.status==='Em Andamento') return `<div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
@@ -1586,6 +1605,14 @@ function hideModal(){
   if(overlay) overlay.innerHTML = '';
   fixMap();
 }
+
+// ── PENDENTE ──────────────────────────────────────────────────────────────────
+async function colocarPendente(id){
+  const motivo = document.getElementById('pend-motivo')?.value?.trim();
+  if(!motivo){ alert('Descreva o motivo da pendência.'); return; }
+  await advanceTicket(id, 'Pendente', 'Chamado colocado em pendência. Motivo: ' + motivo, {pendMotivo: motivo});
+}
+
 // ── BOOT ─────────────────────────────────────────────────────────────────────
 init();
 </script>
