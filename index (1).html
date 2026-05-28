@@ -652,7 +652,9 @@ function doLogout(){ currentUser=null; leafletMap=null; render(); }
 function render(){
   document.getElementById('root').innerHTML = currentUser ? renderShell() : renderLogin();
   bindKeys();
-  if(page==='dashboard'||page==='cameras') requestAnimationFrame(initMap);
+  if(page==='dashboard'||page==='cameras'){
+    requestAnimationFrame(()=>{ initMap(); fixMap(); });
+  }
 }
 
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
@@ -902,6 +904,14 @@ function initMap(){
   renderMapMarkers();
   leafletMap.fitBounds(L.latLngBounds(CAMERAS.map(c=>[c.lat,c.lng])),{padding:[40,40]});
 }
+function fixMap(){
+  // Invalidate map size after DOM changes (modal open/close, tab switch)
+  if(leafletMap){
+    setTimeout(()=>{
+      leafletMap.invalidateSize({animate:false});
+    }, 50);
+  }
+}
 function makeMarkerIcon(status){
   const color=status==='online'?'#00e676':'#ff3d57';
   const glow=status==='online'?'rgba(0,230,118,0.7)':'rgba(255,61,87,0.7)';
@@ -1067,7 +1077,7 @@ function buildCamHistory(){
   Object.keys(CAM_HISTORY).forEach(k=>CAM_HISTORY[k].sort((a,b)=>new Date(b.date)-new Date(a.date)));
 }
 function openCamHistory(camId){buildCamHistory();camHistoryId=camId;render();}
-function closeCamHistory(){camHistoryId=null;render();}
+function closeCamHistory(){camHistoryId=null;render();fixMap();}
 function renderCamHistoryModal(){
   const cam=CAMERAS.find(c=>c.id===camHistoryId); if(!cam) return '';
   const visits=CAM_HISTORY[camHistoryId]||[];
@@ -1126,9 +1136,9 @@ function renderImgPreview(){
 
 // ── USER MODAL ────────────────────────────────────────────────────────────────
 function openUserModal(id){editUserId=id;showUserModal=true;render();}
-function closeUserModal(){showUserModal=false;editUserId=null;render();}
+function closeUserModal(){showUserModal=false;editUserId=null;render();fixMap();}
 function confirmDelete(id){deleteUserId=id;render();}
-function cancelDelete(){deleteUserId=null;render();}
+function cancelDelete(){deleteUserId=null;render();fixMap();}
 function renderUserModal(){
   const isNew=editUserId===null;
   const u=isNew?null:USERS.find(x=>x.id===editUserId);
@@ -1176,7 +1186,7 @@ function renderDeleteConfirm(){
 // ── IMPORT KMZ ────────────────────────────────────────────────────────────────
 let importState={status:'idle',log:[],cameras:null};
 function openImportModal(){importState={status:'idle',log:[],cameras:null};showImportModal=true;render();}
-function closeImportModal(){showImportModal=false;importState={status:'idle',log:[],cameras:null};render();}
+function closeImportModal(){showImportModal=false;importState={status:'idle',log:[],cameras:null};render();fixMap();}
 function renderImportModal(){
   const s=importState;
   const on=s.cameras?s.cameras.filter(c=>c.status==='online').length:0;
@@ -1288,9 +1298,9 @@ async function applyImport(){
 function goPage(p){page=p;leafletMap=null;markersLayer=null;camFilter='all';camSearch='';render();}
 function setView(v){viewAs=v;render();}
 function viewTicket(id){openTicketId=id;render();}
-function closeTicket(){openTicketId=null;render();}
+function closeTicket(){openTicketId=null;render();fixMap();}
 function openNewTicket(){showNewTicket=true;render();}
-function closeNewTicket(){showNewTicket=false;render();}
+function closeNewTicket(){showNewTicket=false;render();fixMap();}
 
 async function advanceTicket(id,status,note,extra){
   const t=tickets.find(x=>x.id===id); if(!t) return;
@@ -1496,7 +1506,7 @@ async function saveNewPassword(){
     document.getElementById('cp-new').value='';
     document.getElementById('cp-confirm').value='';
     // Close after 2 seconds
-    setTimeout(()=>{ showChangePassword=false; render(); }, 2000);
+    setTimeout(()=>{ showChangePassword=false; render(); fixMap(); }, 2000);
   } catch(e) {
     showErr('Erro ao salvar. Tente novamente.');
   }
