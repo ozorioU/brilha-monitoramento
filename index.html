@@ -255,22 +255,22 @@ const SB_HEADERS = {
 // ── SUPABASE API ──────────────────────────────────────────────────────────────
 async function sbGet(table, query=''){
   const r = await fetch(`${SB_URL}/rest/v1/${table}?${query}`, {headers: SB_HEADERS});
-  if(!r.ok) throw new Error(await r.text());
+  if(!r.ok){ const errText = await r.text(); throw new Error(`HTTP ${r.status}: ${errText}`); }
   return r.json();
 }
 async function sbPost(table, body){
   const r = await fetch(`${SB_URL}/rest/v1/${table}`, {method:'POST', headers: SB_HEADERS, body: JSON.stringify(body)});
-  if(!r.ok) throw new Error(await r.text());
+  if(!r.ok){ const errText = await r.text(); throw new Error(`HTTP ${r.status}: ${errText}`); }
   return r.json();
 }
 async function sbPatch(table, query, body){
   const r = await fetch(`${SB_URL}/rest/v1/${table}?${query}`, {method:'PATCH', headers: SB_HEADERS, body: JSON.stringify(body)});
-  if(!r.ok) throw new Error(await r.text());
+  if(!r.ok){ const errText = await r.text(); throw new Error(`HTTP ${r.status}: ${errText}`); }
   return r.json();
 }
 async function sbDelete(table, query){
   const r = await fetch(`${SB_URL}/rest/v1/${table}?${query}`, {method:'DELETE', headers: SB_HEADERS});
-  if(!r.ok) throw new Error(await r.text());
+  if(!r.ok){ const errText = await r.text(); throw new Error(`HTTP ${r.status}: ${errText}`); }
   return true;
 }
 
@@ -1374,7 +1374,9 @@ async function advanceTicket(id,status,note,extra){
     showToast('✓ Ticket atualizado');
   } catch(e){
     tickets=tickets.map(tk=>tk.id!==id?tk:{...tk,status,...extra,timeline:newTimeline,pendMotivo:extra.pendMotivo!==undefined?extra.pendMotivo:tk.pendMotivo});
-    showToast('⚠ Salvo localmente');
+    const errMsg = e.message||'Erro desconhecido';
+    console.error('Supabase PATCH error:', errMsg);
+    showToast('⚠ Salvo localmente — Erro: '+errMsg.substring(0,60), 5000);
   }
   openTicketId=id; showModal(renderTicketModal());
 }
