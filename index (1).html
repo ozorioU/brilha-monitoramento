@@ -264,10 +264,12 @@ async function sbPost(table, body){
   return r.json();
 }
 async function sbPatch(table, query, body){
-  // Use return=minimal to avoid PGRST204 error (no JSON response needed for updates)
   const headers = {...SB_HEADERS, 'Prefer': 'return=minimal'};
-  const r = await fetch(`${SB_URL}/rest/v1/${table}?${query}`, {method:'PATCH', headers, body: JSON.stringify(body)});
-  if(!r.ok){ const errText = await r.text(); throw new Error(`HTTP ${r.status}: ${errText}`); }
+  const url = `${SB_URL}/rest/v1/${table}?${query}`;
+  console.log('sbPatch URL:', url);
+  const r = await fetch(url, {method:'PATCH', headers, body: JSON.stringify(body)});
+  console.log('sbPatch response status:', r.status);
+  if(!r.ok){ const errText = await r.text(); console.error('sbPatch error body:', errText); throw new Error(`HTTP ${r.status}: ${errText}`); }
   return true;
 }
 async function sbDelete(table, query){
@@ -1372,14 +1374,21 @@ async function advanceTicket(id,status,note,extra){
     // Map pendMotivo -> pend_motivo for DB
     const dbExtra = {...extra};
     if('pendMotivo' in dbExtra){ dbExtra.pend_motivo = dbExtra.pendMotivo; delete dbExtra.pendMotivo; }
-    await sbPatch('tickets','id=eq.'+id,{status,...dbExtra,timeline:newTimeline,updated_at:new Date().toISOString()});
+    // Only include pend_motivo if explicitly set (avoid column not found errors)
+    const patchBody = {status, timeline:newTimeline, updated_at:new Date().toISOString()};
+    if(dbExtra.tech_id !== undefined) patchBody.tech_id = dbExtra.tech_id;
+    if(dbExtra.displacement !== undefined) patchBody.displacement = dbExtra.displacement;
+    if(dbExtra.images !== undefined) patchBody.images = dbExtra.images;
+    if(dbExtra.pend_motivo !== undefined) patchBody.pend_motivo = dbExtra.pend_motivo;
+    console.log('PATCH tickets id='+id, JSON.stringify(patchBody).substring(0,200));
+    await sbPatch('tickets','id=eq.'+id, patchBody);
     tickets=tickets.map(tk=>tk.id!==id?tk:{...tk,status,...extra,timeline:newTimeline,pendMotivo:extra.pendMotivo!==undefined?extra.pendMotivo:tk.pendMotivo});
     showToast('✓ Ticket atualizado');
   } catch(e){
     tickets=tickets.map(tk=>tk.id!==id?tk:{...tk,status,...extra,timeline:newTimeline,pendMotivo:extra.pendMotivo!==undefined?extra.pendMotivo:tk.pendMotivo});
     const errMsg = e.message||'Erro desconhecido';
-    console.error('Supabase PATCH error:', errMsg);
-    showToast('⚠ Salvo localmente — Erro: '+errMsg.substring(0,60), 5000);
+    console.error('ERRO SUPABASE:', errMsg);
+    showToast('⚠ Salvo localmente — Erro: '+errMsg.substring(0,80), 6000);
   }
   openTicketId=id; showModal(renderTicketModal());
 }
