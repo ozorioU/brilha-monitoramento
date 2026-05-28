@@ -698,7 +698,7 @@ function renderShell(){
       <div class="sb-user">
         <div class="avatar">${currentUser.avatar||makeAvatar(currentUser.name)}</div>
         <div class="uinfo"><div class="uname">${currentUser.name}</div><div class="urole">${currentUser.role}</div></div>
-        <button class="icon-btn" onclick="showChangePassword=true;render()" title="Alterar senha" style="color:var(--text-muted)">${IC.key}</button>
+        <button class="icon-btn" onclick="showChangePassword=true;showModal(renderChangePasswordModal())" title="Alterar senha" style="color:var(--text-muted)">${IC.key}</button>
         <button class="icon-btn" onclick="doLogout()" title="Sair">${IC.logout}</button>
       </div>
     </aside>
@@ -905,12 +905,20 @@ function initMap(){
   leafletMap.fitBounds(L.latLngBounds(CAMERAS.map(c=>[c.lat,c.lng])),{padding:[40,40]});
 }
 function fixMap(){
-  // Invalidate map size after DOM changes (modal open/close, tab switch)
-  if(leafletMap){
+  if(!leafletMap) return;
+  // Multiple attempts with increasing delays to ensure tiles reload
+  [50, 150, 300, 500].forEach(delay => {
     setTimeout(()=>{
-      leafletMap.invalidateSize({animate:false});
-    }, 50);
-  }
+      if(leafletMap){
+        leafletMap.invalidateSize({animate:false});
+        // Force tile reload if map container has zero size
+        const el = document.getElementById('leaflet-map');
+        if(el && el.offsetHeight === 0){
+          leafletMap = null; // force full reinit on next render
+        }
+      }
+    }, delay);
+  });
 }
 function makeMarkerIcon(status){
   const color=status==='online'?'#00e676':'#ff3d57';
@@ -1076,8 +1084,8 @@ function buildCamHistory(){
   });
   Object.keys(CAM_HISTORY).forEach(k=>CAM_HISTORY[k].sort((a,b)=>new Date(b.date)-new Date(a.date)));
 }
-function openCamHistory(camId){buildCamHistory();camHistoryId=camId;render();}
-function closeCamHistory(){camHistoryId=null;render();fixMap();}
+function openCamHistory(camId){buildCamHistory();camHistoryId=camId;showModal(renderCamHistoryModal());}
+function closeCamHistory(){camHistoryId=null;hideModal();}
 function renderCamHistoryModal(){
   const cam=CAMERAS.find(c=>c.id===camHistoryId); if(!cam) return '';
   const visits=CAM_HISTORY[camHistoryId]||[];
@@ -1135,10 +1143,10 @@ function renderImgPreview(){
 }
 
 // ── USER MODAL ────────────────────────────────────────────────────────────────
-function openUserModal(id){editUserId=id;showUserModal=true;render();}
-function closeUserModal(){showUserModal=false;editUserId=null;render();fixMap();}
-function confirmDelete(id){deleteUserId=id;render();}
-function cancelDelete(){deleteUserId=null;render();fixMap();}
+function openUserModal(id){editUserId=id;showUserModal=true;showModal(renderUserModal());}
+function closeUserModal(){showUserModal=false;editUserId=null;hideModal();}
+function confirmDelete(id){deleteUserId=id;showModal(renderDeleteConfirm());}
+function cancelDelete(){deleteUserId=null;hideModal();}
 function renderUserModal(){
   const isNew=editUserId===null;
   const u=isNew?null:USERS.find(x=>x.id===editUserId);
@@ -1185,8 +1193,8 @@ function renderDeleteConfirm(){
 
 // ── IMPORT KMZ ────────────────────────────────────────────────────────────────
 let importState={status:'idle',log:[],cameras:null};
-function openImportModal(){importState={status:'idle',log:[],cameras:null};showImportModal=true;render();}
-function closeImportModal(){showImportModal=false;importState={status:'idle',log:[],cameras:null};render();fixMap();}
+function openImportModal(){importState={status:'idle',log:[],cameras:null};showImportModal=true;showModal(renderImportModal());}
+function closeImportModal(){showImportModal=false;importState={status:'idle',log:[],cameras:null};hideModal();}
 function renderImportModal(){
   const s=importState;
   const on=s.cameras?s.cameras.filter(c=>c.status==='online').length:0;
@@ -1297,10 +1305,10 @@ async function applyImport(){
 // ── ACTIONS ───────────────────────────────────────────────────────────────────
 function goPage(p){page=p;leafletMap=null;markersLayer=null;camFilter='all';camSearch='';render();}
 function setView(v){viewAs=v;render();}
-function viewTicket(id){openTicketId=id;render();}
-function closeTicket(){openTicketId=null;render();fixMap();}
-function openNewTicket(){showNewTicket=true;render();}
-function closeNewTicket(){showNewTicket=false;render();fixMap();}
+function viewTicket(id){openTicketId=id;showModal(renderTicketModal());}
+function closeTicket(){openTicketId=null;hideModal();}
+function openNewTicket(){showNewTicket=true;showModal(renderNewTicketModal());}
+function closeNewTicket(){showNewTicket=false;hideModal();}
 
 async function advanceTicket(id,status,note,extra){
   const t=tickets.find(x=>x.id===id); if(!t) return;
@@ -1314,7 +1322,7 @@ async function advanceTicket(id,status,note,extra){
     tickets=tickets.map(tk=>tk.id!==id?tk:{...tk,status,...extra,timeline:newTimeline});
     showToast('⚠ Salvo localmente');
   }
-  openTicketId=id; render();
+  openTicketId=id; showModal(renderTicketModal());
 }
 
 async function designarTecnico(id){
@@ -1357,7 +1365,7 @@ async function submitNewTicket(){
     tickets=[normalizeTicket(newTk),...tickets];
     showToast('⚠ Chamado salvo localmente');
   }
-  showNewTicket=false; page='tickets'; render();
+  showNewTicket=false; hideModal(); page='tickets'; render();
 }
 
 async function saveUser(id){
@@ -1395,7 +1403,7 @@ async function saveUser(id){
     else USERS=USERS.map(u=>u.id!==id?u:{...u,name,email,phone,role,avatar,...(pass?{password_hash:pass}:{})});
     showToast('⚠ Salvo localmente');
   }
-  closeUserModal();
+  hideModal(); if(page==='users') render();
 }
 
 async function deleteUserAction(){
@@ -1405,7 +1413,7 @@ async function deleteUserAction(){
   } catch(e){ showToast('⚠ Removido localmente'); }
   USERS=USERS.filter(u=>u.id!==deleteUserId);
   tickets=tickets.map(t=>t.tech_id===deleteUserId?{...t,tech_id:null,techId:null}:t);
-  deleteUserId=null; render();
+  deleteUserId=null; hideModal(); if(page==='users') render();
 }
 
 async function reloadData(){
@@ -1427,13 +1435,9 @@ async function reloadData(){
 function bindKeys(){
   document.addEventListener('keydown',e=>{
     if(e.key==='Escape'){
-      if(previewImg){previewImg=null;render();}
-      else if(openTicketId){closeTicket();}
-      else if(showNewTicket){closeNewTicket();}
-      else if(camHistoryId){closeCamHistory();}
-      else if(showImportModal){closeImportModal();}
-      else if(showUserModal){closeUserModal();}
-      else if(deleteUserId){cancelDelete();} else if(showChangePassword){showChangePassword=false;render();}
+      const mc=document.getElementById('modal-container');
+      if(mc&&mc.innerHTML){hideModal();openTicketId=null;showNewTicket=false;camHistoryId=null;showImportModal=false;showUserModal=false;deleteUserId=null;showChangePassword=false;}
+      else if(previewImg){previewImg=null;render();}
     }
   },{once:true});
 }
@@ -1506,12 +1510,33 @@ async function saveNewPassword(){
     document.getElementById('cp-new').value='';
     document.getElementById('cp-confirm').value='';
     // Close after 2 seconds
-    setTimeout(()=>{ showChangePassword=false; render(); fixMap(); }, 2000);
+    setTimeout(()=>{ showChangePassword=false; hideModal(); }, 2000);
   } catch(e) {
     showErr('Erro ao salvar. Tente novamente.');
   }
 }
 
+
+// ── MODAL HELPERS — show/hide without re-rendering map ───────────────────────
+function showModal(html){
+  let overlay = document.getElementById('modal-container');
+  if(!overlay){
+    overlay = document.createElement('div');
+    overlay.id = 'modal-container';
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML = html;
+  if(leafletMap) setTimeout(()=>leafletMap.invalidateSize({animate:false}), 100);
+}
+function hideModal(){
+  const overlay = document.getElementById('modal-container');
+  if(overlay) overlay.innerHTML = '';
+  if(leafletMap){
+    [50,150,300].forEach(d=>setTimeout(()=>{
+      if(leafletMap) leafletMap.invalidateSize({animate:false});
+    }, d));
+  }
+}
 // ── BOOT ─────────────────────────────────────────────────────────────────────
 init();
 </script>
