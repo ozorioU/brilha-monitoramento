@@ -264,12 +264,15 @@ async function sbPost(table, body){
   return r.json();
 }
 async function sbPatch(table, query, body){
-  const r = await fetch(`${SB_URL}/rest/v1/${table}?${query}`, {method:'PATCH', headers: SB_HEADERS, body: JSON.stringify(body)});
+  // Use return=minimal to avoid PGRST204 error (no JSON response needed for updates)
+  const headers = {...SB_HEADERS, 'Prefer': 'return=minimal'};
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?${query}`, {method:'PATCH', headers, body: JSON.stringify(body)});
   if(!r.ok){ const errText = await r.text(); throw new Error(`HTTP ${r.status}: ${errText}`); }
-  return r.json();
+  return true;
 }
 async function sbDelete(table, query){
-  const r = await fetch(`${SB_URL}/rest/v1/${table}?${query}`, {method:'DELETE', headers: SB_HEADERS});
+  const headers = {...SB_HEADERS, 'Prefer': 'return=minimal'};
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?${query}`, {method:'DELETE', headers});
   if(!r.ok){ const errText = await r.text(); throw new Error(`HTTP ${r.status}: ${errText}`); }
   return true;
 }
