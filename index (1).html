@@ -1341,18 +1341,30 @@ async function applyImport(){
   // Sync to Supabase
   try {
     setLoading(true);
-    // Delete all existing cameras and reinsert
-    await sbDelete('cameras','id=gte.0');
+    // Use UPSERT (merge-duplicates) - no delete needed, avoids foreign key conflicts
     const chunks=[];
     for(let i=0;i<CAMERAS.length;i+=50) chunks.push(CAMERAS.slice(i,i+50));
     for(const chunk of chunks){
-      await sbPost('cameras', chunk.map(c=>({id:c.id,name:c.name,address:c.address,lat:c.lat,lng:c.lng,status:c.status,ip:c.ip,model:c.model,location:c.location})));
+      const resp = await fetch(`${SB_URL}/rest/v1/cameras`, {
+        method:'POST',
+        headers:{
+          ...SB_HEADERS,
+          'Prefer':'return=minimal,resolution=merge-duplicates'
+        },
+        body: JSON.stringify(chunk.map(c=>({
+          id:c.id, name:c.name, address:c.address,
+          lat:c.lat, lng:c.lng, status:c.status,
+          ip:c.ip, model:c.model, location:c.location
+        })))
+      });
+      if(!resp.ok){ const t=await resp.text(); throw new Error('Upsert: HTTP '+resp.status+' '+t.substring(0,100)); }
     }
     setLoading(false);
     showToast('✓ '+CAMERAS.length+' câmeras sincronizadas com o banco!');
   } catch(e){
     setLoading(false);
-    showToast('⚠ Câmeras atualizadas localmente (erro ao sincronizar BD)');
+    console.error('applyImport error:', e.message);
+    showToast('⚠ Erro ao sincronizar: '+e.message.substring(0,80), 6000);
   }
   leafletMap=null; markersLayer=null;
   importState.status='done'; render();
