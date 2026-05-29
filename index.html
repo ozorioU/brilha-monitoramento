@@ -1249,8 +1249,8 @@ function renderDeleteConfirm(){
 
 // ── IMPORT KMZ ────────────────────────────────────────────────────────────────
 let importState={status:'idle',log:[],cameras:null};
-function openImportModal(){importState={status:'idle',log:[],cameras:null};showImportModal=true;showModal(renderImportModal());}
-function closeImportModal(){showImportModal=false;importState={status:'idle',log:[],cameras:null};hideModal();}
+function openImportModal(){importState={status:'idle',log:[],cameras:null};showImportModal=true;render();}
+function closeImportModal(){showImportModal=false;importState={status:'idle',log:[],cameras:null};render();}
 function renderImportModal(){
   const s=importState;
   const on=s.cameras?s.cameras.filter(c=>c.status==='online').length:0;
