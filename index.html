@@ -1978,6 +1978,11 @@ function renderChartSVG(data, projection, total){
       ${filled.slice(-30).map(d=>`<circle cx="${xOf(d.date)}" cy="${yOf(d.online)}" r="3" fill="#00e676" stroke="var(--bg3)" stroke-width="1.5"/>`).join('')}
       <!-- Today line -->
       ${filled.find(d=>d.date===new Date().toISOString().split('T')[0])?`<line x1="${xOf(new Date().toISOString().split('T')[0])}" y1="${PAD.top}" x2="${xOf(new Date().toISOString().split('T')[0])}" y2="${H-PAD.bottom}" stroke="rgba(202,157,74,0.4)" stroke-width="1" stroke-dasharray="3,3"/><text x="${xOf(new Date().toISOString().split('T')[0])}" y="${PAD.top-4}" text-anchor="middle" font-size="9" fill="var(--accent)" font-family="Roboto,sans-serif">HOJE</text>`:''}
+      <!-- Meta line: 209 cameras -->
+      <line x1="${PAD.left}" y1="${yOf(209)}" x2="${W-PAD.right}" y2="${yOf(209)}" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6,3"/>
+      <text x="${W-PAD.right+4}" y="${yOf(209)+4}" font-size="11" fill="#fbbf24" font-family="Roboto,sans-serif" font-weight="600">META 209</text>
+      <rect x="${PAD.left}" y="${yOf(209)-11}" width="50" height="14" rx="3" fill="rgba(251,191,36,0.12)"/>
+      <text x="${PAD.left+4}" y="${yOf(209)+1}" font-size="10" fill="#fbbf24" font-family="Roboto,sans-serif" font-weight="600">209</text>
       <!-- Axes -->
       <line x1="${PAD.left}" y1="${PAD.top}" x2="${PAD.left}" y2="${H-PAD.bottom}" stroke="#1e2a3a" stroke-width="1"/>
       <line x1="${PAD.left}" y1="${H-PAD.bottom}" x2="${W-PAD.right}" y2="${H-PAD.bottom}" stroke="#1e2a3a" stroke-width="1"/>
@@ -2066,6 +2071,7 @@ function renderDashboardChart(){
         <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)"><div style="width:16px;height:2px;background:var(--green)"></div>Online</div>
         <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)"><div style="width:16px;height:2px;background:var(--red)"></div>Offline</div>
         ${projection&&projection.length?'<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)"><div style="width:16px;height:2px;border-top:2px dashed var(--purple)"></div>Projeção</div>':''}
+        <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#fbbf24"><div style="width:16px;height:0;border-top:1.5px dashed #fbbf24"></div>Meta (209)</div>
         <div id="${chartId}_tooltip" style="display:none;background:var(--bg2);border:1px solid rgba(202,157,74,.3);border-radius:8px;padding:8px 12px;font-size:12px;margin-left:auto;min-width:200px"></div>
       </div>
       <svg id="${chartId}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="max-width:100%;overflow:visible;cursor:crosshair"
@@ -2108,6 +2114,11 @@ function renderDashboardChart(){
         ${pointsData.filter((_,i)=>i%Math.max(1,Math.floor(pointsData.length/20))===0||i===pointsData.length-1).map(p=>`
           <circle cx="${p.x}" cy="${p.y}"  r="2.5" fill="#00e676" opacity="0.7"/>
           <circle cx="${p.x}" cy="${p.yo}" r="2" fill="#ff3d57" opacity="0.5"/>`).join('')}
+        <!-- Meta 209 -->
+        <line x1="${PAD.left}" y1="${yOf(209)}" x2="${W-PAD.right}" y2="${yOf(209)}" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6,3"/>
+        <rect x="${PAD.left}" y="${yOf(209)-11}" width="42" height="14" rx="3" fill="rgba(251,191,36,0.15)"/>
+        <text x="${PAD.left+4}" y="${yOf(209)+1}" font-size="9" fill="#fbbf24" font-family="Roboto,sans-serif" font-weight="700">209</text>
+        <text x="${W-PAD.right-4}" y="${yOf(209)-4}" text-anchor="end" font-size="9" fill="#fbbf24" font-family="Roboto,sans-serif" font-weight="600">META</text>
         <!-- Axes -->
         <line x1="${PAD.left}" y1="${H-PAD.bottom}" x2="${W-PAD.right}" y2="${H-PAD.bottom}" stroke="#1e2a3a" stroke-width="1"/>
         <line x1="${PAD.left}" y1="${PAD.top}" x2="${PAD.left}" y2="${H-PAD.bottom}" stroke="#1e2a3a" stroke-width="1"/>
