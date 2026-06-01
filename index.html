@@ -544,6 +544,7 @@ const myTks     = () => currentUser.role==='tech' ? tickets.filter(t=>t.tech_id=
 const techs     = () => USERS.filter(u=>u.role==='tech');
 const getOnline  = () => CAMERAS.filter(c=>c.status==='online').length;
 const getOffline = () => CAMERAS.filter(c=>c.status==='offline').length;
+const getTotal   = () => CAMERAS.length;
 const makeAvatar = n => n.split(' ').filter((_,i,a)=>i===0||i===a.length-1).map(w=>w[0]||'').join('').toUpperCase().slice(0,2)||'??';
 const roleLabel  = r => r==='admin'?'Administrador':r==='tech'?'Técnico':'Cliente';
 const roleClass  = r => r==='admin'?'s-tecnico':r==='tech'?'s-reconhecido':'s-finalizado';
