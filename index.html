@@ -1966,14 +1966,13 @@ function renderChartSVG(data, projection, total){
       <!-- Filled area online -->
       <path d="${onlinePath}L${xOf(filled[filled.length-1].date)},${yOf(0)}L${xOf(filled[0].date)},${yOf(0)}Z" fill="rgba(0,230,118,0.08)"/>
       <!-- Filled area offline -->
-      <path d="${offlinePath}L${xOf(filled[filled.length-1].date)},${yOf(total)}L${xOf(filled[0].date)},${yOf(total)}Z" fill="rgba(255,61,87,0.06)"/>
+      
       <!-- Online line -->
       <path d="${onlinePath}" fill="none" stroke="#00e676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       <!-- Offline line -->
-      <path d="${offlinePath}" fill="none" stroke="#ff3d57" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      
       <!-- Projection lines -->
       ${projPath?`<path d="${projPath}" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="5,3" stroke-linecap="round"/>`:''}
-      ${projOffPath?`<path d="${projOffPath}" fill="none" stroke="#f87171" stroke-width="1.5" stroke-dasharray="4,3" stroke-linecap="round" opacity="0.6"/>`:''}
       <!-- Data points (last 30 days) -->
       ${filled.slice(-30).map(d=>`<circle cx="${xOf(d.date)}" cy="${yOf(d.online)}" r="3" fill="#00e676" stroke="var(--bg3)" stroke-width="1.5"/>`).join('')}
       <!-- Today line -->
@@ -2069,7 +2068,6 @@ function renderDashboardChart(){
     <div style="padding:12px 16px 4px;overflow-x:auto">
       <div style="display:flex;gap:14px;margin-bottom:8px;flex-wrap:wrap">
         <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)"><div style="width:16px;height:2px;background:var(--green)"></div>Online</div>
-        <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)"><div style="width:16px;height:2px;background:var(--red)"></div>Offline</div>
         ${projection&&projection.length?'<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)"><div style="width:16px;height:2px;border-top:2px dashed var(--purple)"></div>Projeção</div>':''}
         <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#fbbf24"><div style="width:16px;height:0;border-top:1.5px dashed #fbbf24"></div>Meta (209)</div>
         <div id="${chartId}_tooltip" style="display:none;background:var(--bg2);border:1px solid rgba(202,157,74,.3);border-radius:8px;padding:8px 12px;font-size:12px;margin-left:auto;min-width:200px"></div>
@@ -2086,10 +2084,10 @@ function renderDashboardChart(){
         ${xLabels.map(l=>`<text x="${l.x}" y="${H-6}" text-anchor="middle" font-size="10" fill="#445577" font-family="Roboto,sans-serif">${l.label}</text>`).join('')}
         <!-- Areas -->
         <path d="${onlinePath}L${xOf(recent[recent.length-1].date)},${yOf(0)}L${xOf(recent[0].date)},${yOf(0)}Z" fill="rgba(0,230,118,0.07)"/>
-        <path d="${offlinePath}L${xOf(recent[recent.length-1].date)},${yOf(total)}L${xOf(recent[0].date)},${yOf(total)}Z" fill="rgba(255,61,87,0.05)"/>
+        
         <!-- Lines -->
         <path d="${onlinePath}"  fill="none" stroke="#00e676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="${offlinePath}" fill="none" stroke="#ff3d57" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        
         ${projPath?`<path d="${projPath}" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="5,3" stroke-linecap="round"/>`:''}
         <!-- Cursor line (hidden by default) -->
         <line id="${chartId}_cursor" x1="0" y1="${PAD.top}" x2="0" y2="${H-PAD.bottom}" stroke="rgba(202,157,74,0.4)" stroke-width="1" stroke-dasharray="3,3" display="none"/>
@@ -2112,8 +2110,7 @@ function renderDashboardChart(){
         }).join('')}
         <!-- Dot indicators -->
         ${pointsData.filter((_,i)=>i%Math.max(1,Math.floor(pointsData.length/20))===0||i===pointsData.length-1).map(p=>`
-          <circle cx="${p.x}" cy="${p.y}"  r="2.5" fill="#00e676" opacity="0.7"/>
-          <circle cx="${p.x}" cy="${p.yo}" r="2" fill="#ff3d57" opacity="0.5"/>`).join('')}
+          <circle cx="${p.x}" cy="${p.y}"  r="2.5" fill="#00e676" opacity="0.7"/>`).join('')}
         <!-- Meta 209 -->
         <line x1="${PAD.left}" y1="${yOf(209)}" x2="${W-PAD.right}" y2="${yOf(209)}" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6,3"/>
         <rect x="${PAD.left}" y="${yOf(209)-11}" width="42" height="14" rx="3" fill="rgba(251,191,36,0.15)"/>
