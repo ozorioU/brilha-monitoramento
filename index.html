@@ -534,6 +534,8 @@ let leafletMap = null, markersLayer = null, selectedCam = null;
 let openTicketId = null, showNewTicket = false, showImportModal = false;
 let camHistoryId = null, previewImg = null;
 let showUserModal = false, editUserId = null, deleteUserId = null, showChangePassword = false, deleteTicketId = null;
+let manualStats = null; // {total, online} when manually overridden
+let showEditStats = false;
 let mapFilter = 'all', mapSearch = '', camFilter = 'all', camSearch = '';
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
@@ -544,9 +546,9 @@ const effRole   = () => currentUser.role==='admin' ? viewAs : currentUser.role;
 const openTks   = () => tickets.filter(t=>t.status!=='Finalizado');
 const myTks     = () => currentUser.role==='tech' ? tickets.filter(t=>t.tech_id===currentUser.id) : tickets;
 const techs     = () => USERS.filter(u=>u.role==='tech');
-const getOnline  = () => CAMERAS.filter(c=>c.status==='online').length;
-const getOffline = () => CAMERAS.filter(c=>c.status==='offline').length;
-const getTotal   = () => CAMERAS.length;
+const getOnline  = () => manualStats!==null ? manualStats.online : CAMERAS.filter(c=>c.status==='online').length;
+const getOffline = () => manualStats!==null ? manualStats.total-manualStats.online : CAMERAS.filter(c=>c.status==='offline').length;
+const getTotal   = () => manualStats!==null ? manualStats.total : CAMERAS.length;
 const makeAvatar = n => n.split(' ').filter((_,i,a)=>i===0||i===a.length-1).map(w=>w[0]||'').join('').toUpperCase().slice(0,2)||'??';
 const roleLabel  = r => r==='admin'?'Administrador':r==='tech'?'Técnico':'Cliente';
 const roleClass  = r => r==='admin'?'s-tecnico':r==='tech'?'s-reconhecido':'s-finalizado';
@@ -599,6 +601,7 @@ const IC={
 // ── INIT — load data from Supabase ────────────────────────────────────────────
 async function init(){
   loadChartData();
+  await loadManualStats();
   setLoading(true);
   try {
     // Load users
@@ -747,7 +750,8 @@ function renderShell(){
   ${showUserModal?renderUserModal():''}
   ${deleteUserId?renderDeleteConfirm():''}
   ${showChangePassword?renderChangePasswordModal():''}
-  ${deleteTicketId?renderDeleteTicketConfirm():''}`;
+  ${deleteTicketId?renderDeleteTicketConfirm():''}
+  ${showEditStats?renderEditStatsModal():''}`;
 }
 
 function renderPage(){
@@ -765,6 +769,21 @@ function renderDashboard(){
   const on=getOnline(),off=getOffline(),tot=CAMERAS.length,pct=Math.round(on/tot*100);
   const tks=er==='tech'?myTks():tickets;
   return `
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+    <div style="font-size:11px">
+      ${manualStats
+        ? '<span style="background:rgba(255,196,0,.1);color:var(--yellow);border:1px solid rgba(255,196,0,.3);padding:2px 10px;border-radius:20px;font-size:11px">⚙ Valores editados manualmente</span>'
+        : '<span style="color:var(--text-muted)">Valores do último KMZ importado</span>'
+      }
+    </div>
+    ${er==='admin'?`<div style="display:flex;gap:6px">
+      <button class="btn btn-ghost btn-sm" onclick="showEditStats=true;render()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Editar Valores
+      </button>
+      ${manualStats?'<button class="btn btn-danger btn-sm" onclick="restoreKmzStats()">↩ Restaurar KMZ</button>':''}
+    </div>`:''}
+  </div>
   <div class="stats-grid">
     <div class="stat-card sc-blue"><div class="sc-icon ic-blue">${IC.cam}</div><div class="sc-val">${tot}</div><div class="sc-lbl">Total</div><div class="sc-sub">câmeras</div></div>
     <div class="stat-card sc-green"><div class="sc-icon ic-green">${IC.check}</div><div class="sc-val" style="color:var(--green)">${on}</div><div class="sc-lbl">Online</div><div class="sc-sub" style="color:var(--green)">operacionais</div></div>
@@ -1648,6 +1667,46 @@ const ALL_DAYS = ["2026-02-01", "2026-02-02", "2026-02-03", "2026-02-04", "2026-
 // chartData: {date: 'YYYY-MM-DD', online: number|null}
 let chartData = ALL_DAYS.map(d => ({date:d, online:null}));
 
+
+function restoreKmzStats(){
+  manualStats=null;
+  saveManualStats();
+  showEditStats=false;
+  showToast('Valores restaurados para o KMZ!');
+  render();
+}
+async function saveManualStats(){
+  // Save to Supabase so ALL users see the same values
+  try {
+    const val = manualStats ? JSON.stringify(manualStats) : null;
+    // Try upsert into settings table
+    const resp = await fetch(`${SB_URL}/rest/v1/settings`, {
+      method: 'POST',
+      headers: {...SB_HEADERS, 'Prefer': 'return=minimal,resolution=merge-duplicates'},
+      body: JSON.stringify({key:'manual_stats', value: manualStats||null, updated_at: new Date().toISOString()})
+    });
+    if(!resp.ok) throw new Error('settings save failed');
+  } catch(e){
+    // Fallback to localStorage if Supabase fails
+    try{ if(manualStats) localStorage.setItem('brilha_stats',JSON.stringify(manualStats)); else localStorage.removeItem('brilha_stats'); }catch(e2){}
+  }
+}
+async function loadManualStats(){
+  // Load from Supabase first
+  try {
+    const data = await sbGet('settings','select=value&key=eq.manual_stats&limit=1');
+    if(data && data.length>0 && data[0].value){
+      manualStats = data[0].value;
+      return;
+    } else {
+      manualStats = null;
+      return;
+    }
+  } catch(e){
+    // Fallback to localStorage
+    try{ const s=localStorage.getItem('brilha_stats'); if(s) manualStats=JSON.parse(s); }catch(e2){}
+  }
+}
 function saveChartData(){
   try{ localStorage.setItem('brilha_chart', JSON.stringify(chartData)); }catch(e){}
 }
@@ -2116,6 +2175,89 @@ async function executeDeleteTicket(id){
   tickets = tickets.filter(t=>t.id!==id);
   deleteTicketId = null;
   render();
+}
+
+
+// ── EDIT STATS MANUALLY ───────────────────────────────────────────────────────
+function renderEditStatsModal(){
+  const kmzTotal   = CAMERAS.length;
+  const kmzOnline  = CAMERAS.filter(c=>c.status==='online').length;
+  const kmzOffline = CAMERAS.filter(c=>c.status==='offline').length;
+  const curTotal   = getTotal();
+  const curOnline  = getOnline();
+
+  return `<div class="modal-overlay" onclick="if(event.target===this){showEditStats=false;render()}">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-head">
+      <div class="modal-title">⚙ Editar Valores do Dashboard</div>
+      <button class="icon-btn" onclick="showEditStats=false;render()">${IC.x}</button>
+    </div>
+    <div class="modal-body">
+      <!-- KMZ reference -->
+      <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:8px;padding:12px 14px;margin-bottom:16px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Valores do último KMZ importado</div>
+        <div style="display:flex;gap:20px">
+          <div><span style="font-size:20px;font-weight:300;color:var(--text)">${kmzTotal}</span><span style="font-size:11px;color:var(--text-muted);margin-left:4px">Total</span></div>
+          <div><span style="font-size:20px;font-weight:300;color:var(--green)">${kmzOnline}</span><span style="font-size:11px;color:var(--text-muted);margin-left:4px">Online</span></div>
+          <div><span style="font-size:20px;font-weight:300;color:var(--red)">${kmzOffline}</span><span style="font-size:11px;color:var(--text-muted);margin-left:4px">Offline</span></div>
+        </div>
+      </div>
+
+      <!-- Manual inputs -->
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;line-height:1.6">
+        Edite os valores abaixo para exibir números diferentes no dashboard.<br/>
+        <span style="color:var(--yellow)">⚠ O mapa continuará usando os dados reais do KMZ.</span>
+      </div>
+
+      <div class="form-grid">
+        <div class="f-group fg-full">
+          <label class="f-label">Total de Câmeras</label>
+          <input class="f-input" id="es-total" type="number" min="1" max="9999"
+            value="${curTotal}" placeholder="${kmzTotal}"/>
+        </div>
+        <div class="f-group">
+          <label class="f-label" style="color:var(--green)">Online</label>
+          <input class="f-input" id="es-online" type="number" min="0"
+            value="${curOnline}" placeholder="${kmzOnline}"
+            oninput="document.getElementById('es-offline-preview').textContent=Math.max(0,(parseInt(document.getElementById('es-total').value)||${curTotal})-(parseInt(this.value)||0))"
+            style="border-color:rgba(0,230,118,.3)"/>
+        </div>
+        <div class="f-group">
+          <label class="f-label" style="color:var(--red)">Offline (calculado)</label>
+          <div style="background:var(--bg4);border:1px solid rgba(255,61,87,.3);color:var(--red);padding:9px 11px;border-radius:6px;font-size:13px;font-weight:500">
+            <span id="es-offline-preview">${curTotal-curOnline}</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="es-error" style="display:none;margin-top:10px;padding:8px 12px;background:rgba(255,61,87,.1);border:1px solid rgba(255,61,87,.3);border-radius:6px;font-size:13px;color:var(--red)"></div>
+    </div>
+    <div class="modal-foot" style="justify-content:space-between">
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" onclick="showEditStats=false;render()">Cancelar</button>
+        ${manualStats?`<button class="btn btn-danger btn-sm" onclick="restoreKmzStats()">↩ Restaurar KMZ</button>`:''}
+      </div>
+      <button class="btn btn-primary" onclick="saveManualStatsForm()">✓ Salvar Valores</button>
+    </div>
+  </div></div>`;
+}
+
+async function saveManualStatsForm(){
+  const total  = parseInt(document.getElementById('es-total').value);
+  const online = parseInt(document.getElementById('es-online').value);
+  const errEl  = document.getElementById('es-error');
+  errEl.style.display='none';
+
+  if(isNaN(total)||total<1)  return (errEl.textContent='Total inválido.', errEl.style.display='block');
+  if(isNaN(online)||online<0) return (errEl.textContent='Online inválido.', errEl.style.display='block');
+  if(online>total) return (errEl.textContent='Online não pode ser maior que o total.', errEl.style.display='block');
+
+  manualStats = {total, online};
+  showEditStats = false;
+  showToast('💾 Salvando...');
+  render();
+  await saveManualStats();
+  showToast('✓ Valores atualizados para todos os usuários!');
 }
 
 // ── BOOT ─────────────────────────────────────────────────────────────────────
