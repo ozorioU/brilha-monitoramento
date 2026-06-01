@@ -145,6 +145,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Roboto
 .tk-list{display:flex;flex-direction:column;gap:10px;}
 .tk-card{background:var(--bg3);border:1px solid rgba(202,157,74,.1);border-radius:10px;padding:14px;cursor:pointer;transition:all .2s;}
 .tk-card:hover{border-color:var(--accent);}
+.tk-del-btn{background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px 6px;border-radius:4px;transition:all .2s;flex-shrink:0;display:flex;align-items:center;}
+.tk-del-btn:hover{color:var(--red);background:rgba(255,61,87,.1);}
 .tk-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;}
 .tk-id{font-size:11px;color:var(--accent);font-family:monospace;font-weight:600;margin-bottom:2px;}
 .tk-title{font-size:14px;font-weight:500;letter-spacing:.2px;}
@@ -531,7 +533,7 @@ let USERS = [], tickets = [];
 let leafletMap = null, markersLayer = null, selectedCam = null;
 let openTicketId = null, showNewTicket = false, showImportModal = false;
 let camHistoryId = null, previewImg = null;
-let showUserModal = false, editUserId = null, deleteUserId = null, showChangePassword = false;
+let showUserModal = false, editUserId = null, deleteUserId = null, showChangePassword = false, deleteTicketId = null;
 let mapFilter = 'all', mapSearch = '', camFilter = 'all', camSearch = '';
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
@@ -744,7 +746,8 @@ function renderShell(){
   ${previewImg?renderImgPreview():''}
   ${showUserModal?renderUserModal():''}
   ${deleteUserId?renderDeleteConfirm():''}
-  ${showChangePassword?renderChangePasswordModal():''}`;
+  ${showChangePassword?renderChangePasswordModal():''}
+  ${deleteTicketId?renderDeleteTicketConfirm():''}`;
 }
 
 function renderPage(){
@@ -859,10 +862,17 @@ function renderTickets(){
 function tkCard(t){
   const cam=CAMERAS.find(c=>c.id===t.cameraId);
   const tech=USERS.find(u=>u.id===t.techId||u.id===t.tech_id);
+  const er=effRole();
+  const canDelete = er==='admin' || (currentUser && t.requester?.email===currentUser.email && t.status==='Aberto');
   return `<div class="tk-card" onclick="viewTicket('${t.id}')">
     <div class="tk-head">
-      <div><div class="tk-id">${t.id}</div><div class="tk-title">${t.title}</div></div>
-      <span class="tk-badge badge ${statusClass(t.status)}">${t.status}</span>
+      <div style="flex:1;min-width:0"><div class="tk-id">${t.id}</div><div class="tk-title">${t.title}</div></div>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+        <span class="tk-badge badge ${statusClass(t.status)}">${t.status}</span>
+        ${canDelete?`<button class="tk-del-btn" onclick="event.stopPropagation();confirmDeleteTicket('${t.id}')" title="Excluir chamado">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        </button>`:''}
+      </div>
     </div>
     <div class="tk-meta">
       <span>${t.requester?.name||''}</span><span>·</span>
@@ -1030,6 +1040,9 @@ function renderTicketModal(){
       <div><div style="font-size:11px;color:var(--accent);font-family:monospace;margin-bottom:3px">${t.id}</div><div class="modal-title">${t.title}</div></div>
       <div style="display:flex;align-items:center;gap:10px">
         <span class="badge ${statusClass(t.status)}">${t.status}</span>
+        ${(er==='admin'||(t.requester?.email===currentUser.email&&t.status==='Aberto'))?`<button class="btn btn-danger btn-sm" onclick="closeTicket();confirmDeleteTicket('${t.id}')" title="Excluir chamado">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg> Excluir
+        </button>`:''}
         <button class="icon-btn" onclick="closeTicket()">${IC.x}</button>
       </div>
     </div>
@@ -1930,20 +1943,22 @@ function renderDashboardChart(){
   const total      = getTotal();
   if(filled.length===0) return '';
 
-  // Show last 60 days + next 30 projected
-  const recent     = filled.slice(-60);
-  const today      = new Date().toISOString().split('T')[0];
+  const recent  = filled.slice(-60);
+  const today   = new Date().toISOString().split('T')[0];
+  const last    = recent[recent.length-1];
+  const avgOnline = Math.round(filled.reduce((s,d)=>s+d.online,0)/filled.length);
+  const trend   = filled.length>=2 ? filled[filled.length-1].online - filled[filled.length-2].online : 0;
 
-  const W=1060,H=200,PAD={top:16,right:16,bottom:32,left:46};
+  const W=1060,H=220,PAD={top:20,right:20,bottom:40,left:50};
   const cW=W-PAD.left-PAD.right, cH=H-PAD.top-PAD.bottom;
 
-  const allPts = [...recent, ...(projection||[])];
+  const allPts = [...recent,...(projection||[])];
   const minDate= new Date(allPts[0].date+'T12:00:00');
   const maxDate= new Date(allPts[allPts.length-1].date+'T12:00:00');
   const dRange = (maxDate-minDate)||1;
 
-  const xOf=d=>PAD.left+((new Date(d+'T12:00:00')-minDate)/dRange)*cW;
-  const yOf=v=>PAD.top+cH-(v/total)*cH;
+  const xOf = d => PAD.left+((new Date(d+'T12:00:00')-minDate)/dRange)*cW;
+  const yOf = v => PAD.top+cH-(v/total)*cH;
 
   let onlinePath='', offlinePath='', projPath='';
   recent.forEach((d,i)=>{
@@ -1956,37 +1971,151 @@ function renderDashboardChart(){
     projection.forEach(d=>{ projPath+=`L${xOf(d.date)},${yOf(d.online)}`; });
   }
 
-  const last = recent[recent.length-1];
-  const avgOnline = Math.round(filled.reduce((s,d)=>s+d.online,0)/filled.length);
-  const trend = filled.length>=2 ? filled[filled.length-1].online - filled[filled.length-2].online : 0;
+  // X axis date labels — show first day of each week
+  const xLabels=[];
+  recent.forEach((d,i)=>{
+    const dt=new Date(d.date+'T12:00:00');
+    if(i===0||dt.getDay()===1||i===recent.length-1){
+      const dd=String(dt.getDate()).padStart(2,'0');
+      const mm=String(dt.getMonth()+1).padStart(2,'0');
+      xLabels.push({x:xOf(d.date), label:`${dd}/${mm}`});
+    }
+  });
+
+  // Interactive points data as JSON for mouseover
+  const pointsData = recent.map(d=>({
+    date:d.date, online:d.online, offline:total-d.online,
+    pct:Math.round(d.online/total*100),
+    x:Math.round(xOf(d.date)), y:Math.round(yOf(d.online)),
+    yo:Math.round(yOf(total-d.online))
+  }));
+  const chartId = 'chart_'+Date.now();
 
   return `<div class="card" style="margin-bottom:20px">
     <div class="card-header">
-      <div class="card-title">${IC.chart||'📈'} Evolução de Câmeras</div>
+      <div class="card-title">📈 Evolução de Câmeras</div>
       <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-        <span style="font-size:12px;color:var(--text-muted)">Último registro: <strong style="color:var(--green)">${last.online} online</strong> · <strong style="color:var(--red)">${total-last.online} offline</strong></span>
+        <span style="font-size:12px;color:var(--text-muted)">Último: <strong style="color:var(--green)">${last.online} online</strong> · <strong style="color:var(--red)">${total-last.online} offline</strong></span>
         <span style="font-size:12px;color:var(--text-muted)">Média: <strong style="color:var(--accent)">${avgOnline}</strong></span>
         <span style="font-size:12px;color:${trend>=0?'var(--green)':'var(--red)'}">${trend>=0?'▲':'▼'} ${Math.abs(trend)} vs ontem</span>
         <a onclick="goPage('grafico')" style="font-size:11px;color:var(--accent);cursor:pointer;text-decoration:underline">Ver detalhes →</a>
       </div>
     </div>
-    <div style="padding:12px 16px;overflow-x:auto">
-      <div style="display:flex;gap:12px;margin-bottom:8px;flex-wrap:wrap">
+    <div style="padding:12px 16px 4px;overflow-x:auto">
+      <div style="display:flex;gap:14px;margin-bottom:8px;flex-wrap:wrap">
         <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)"><div style="width:16px;height:2px;background:var(--green)"></div>Online</div>
         <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)"><div style="width:16px;height:2px;background:var(--red)"></div>Offline</div>
-        ${projection&&projection.length?`<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)"><div style="width:16px;height:2px;border-top:2px dashed var(--purple)"></div>Projeção</div>`:''}
+        ${projection&&projection.length?'<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)"><div style="width:16px;height:2px;border-top:2px dashed var(--purple)"></div>Projeção</div>':''}
+        <div id="${chartId}_tooltip" style="display:none;background:var(--bg2);border:1px solid rgba(202,157,74,.3);border-radius:8px;padding:8px 12px;font-size:12px;margin-left:auto;min-width:200px"></div>
       </div>
-      <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="max-width:100%;overflow:visible">
-        ${[0,0.25,0.5,0.75,1].map(p=>{const v=Math.round(total*p);return`<line x1="${PAD.left}" y1="${yOf(v)}" x2="${W-PAD.right}" y2="${yOf(v)}" stroke="rgba(255,255,255,0.04)" stroke-width="1"/><text x="${PAD.left-4}" y="${yOf(v)+4}" text-anchor="end" font-size="9" fill="#445577" font-family="Roboto,sans-serif">${v}</text>`;}).join('')}
+      <svg id="${chartId}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="max-width:100%;overflow:visible;cursor:crosshair"
+        onmouseleave="document.getElementById('${chartId}_tooltip').style.display='none';document.getElementById('${chartId}_cursor').style.display='none'">
+        <!-- Grid -->
+        ${[0,0.25,0.5,0.75,1].map(p=>{
+          const v=Math.round(total*p);
+          return `<line x1="${PAD.left}" y1="${yOf(v)}" x2="${W-PAD.right}" y2="${yOf(v)}" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+          <text x="${PAD.left-4}" y="${yOf(v)+4}" text-anchor="end" font-size="10" fill="#445577" font-family="Roboto,sans-serif">${v}</text>`;
+        }).join('')}
+        <!-- X labels -->
+        ${xLabels.map(l=>`<text x="${l.x}" y="${H-6}" text-anchor="middle" font-size="10" fill="#445577" font-family="Roboto,sans-serif">${l.label}</text>`).join('')}
+        <!-- Areas -->
         <path d="${onlinePath}L${xOf(recent[recent.length-1].date)},${yOf(0)}L${xOf(recent[0].date)},${yOf(0)}Z" fill="rgba(0,230,118,0.07)"/>
         <path d="${offlinePath}L${xOf(recent[recent.length-1].date)},${yOf(total)}L${xOf(recent[0].date)},${yOf(total)}Z" fill="rgba(255,61,87,0.05)"/>
+        <!-- Lines -->
         <path d="${onlinePath}"  fill="none" stroke="#00e676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="${offlinePath}" fill="none" stroke="#ff3d57" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         ${projPath?`<path d="${projPath}" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="5,3" stroke-linecap="round"/>`:''}
+        <!-- Cursor line (hidden by default) -->
+        <line id="${chartId}_cursor" x1="0" y1="${PAD.top}" x2="0" y2="${H-PAD.bottom}" stroke="rgba(202,157,74,0.4)" stroke-width="1" stroke-dasharray="3,3" display="none"/>
+        <!-- Today marker -->
+        ${recent.find(d=>d.date===today)?`<line x1="${xOf(today)}" y1="${PAD.top}" x2="${xOf(today)}" y2="${H-PAD.bottom}" stroke="rgba(202,157,74,0.35)" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="${xOf(today)}" y="${PAD.top-4}" text-anchor="middle" font-size="9" fill="var(--accent)" font-family="Roboto,sans-serif">HOJE</text>`:''}
+        <!-- Interactive overlay rectangles per data point -->
+        ${pointsData.map((p,i)=>{
+          const nextX = i<pointsData.length-1 ? pointsData[i+1].x : W-PAD.right;
+          const prevX = i>0 ? pointsData[i-1].x : PAD.left;
+          const rx = Math.round((p.x+prevX)/2);
+          const rw = Math.round((nextX-prevX)/2);
+          const dt = new Date(p.date+'T12:00:00');
+          const fmtD = `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()}`;
+          const dayNames=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+          const dayN = dayNames[dt.getDay()];
+          return `<rect x="${rx}" y="${PAD.top}" width="${rw}" height="${cH}" fill="transparent" 
+            onmouseover="chartHover('${chartId}',${p.x},${p.y},${p.yo},${p.online},${p.offline},${p.pct},'${fmtD}','${dayN}')"
+          />`;
+        }).join('')}
+        <!-- Dot indicators -->
+        ${pointsData.filter((_,i)=>i%Math.max(1,Math.floor(pointsData.length/20))===0||i===pointsData.length-1).map(p=>`
+          <circle cx="${p.x}" cy="${p.y}"  r="2.5" fill="#00e676" opacity="0.7"/>
+          <circle cx="${p.x}" cy="${p.yo}" r="2" fill="#ff3d57" opacity="0.5"/>`).join('')}
+        <!-- Axes -->
         <line x1="${PAD.left}" y1="${H-PAD.bottom}" x2="${W-PAD.right}" y2="${H-PAD.bottom}" stroke="#1e2a3a" stroke-width="1"/>
+        <line x1="${PAD.left}" y1="${PAD.top}" x2="${PAD.left}" y2="${H-PAD.bottom}" stroke="#1e2a3a" stroke-width="1"/>
       </svg>
     </div>
   </div>`;
+}
+
+function chartHover(chartId, x, y, yo, online, offline, pct, date, dayName){
+  const cursor = document.getElementById(chartId+'_cursor');
+  const tooltip = document.getElementById(chartId+'_tooltip');
+  if(cursor){ cursor.setAttribute('x1',x); cursor.setAttribute('x2',x); cursor.style.display=''; cursor.removeAttribute('display'); }
+  if(tooltip){
+    const color = pct>=80?'var(--green)':pct>=60?'var(--yellow)':'var(--red)';
+    tooltip.style.display='block';
+    tooltip.innerHTML=`
+      <div style="font-weight:600;color:var(--text);margin-bottom:6px">${dayName}, ${date}</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div><span style="color:var(--green);font-size:15px;font-weight:600">${online}</span><span style="color:var(--text-muted);font-size:11px"> online</span></div>
+        <div><span style="color:var(--red);font-size:15px;font-weight:600">${offline}</span><span style="color:var(--text-muted);font-size:11px"> offline</span></div>
+        <div><span style="color:${color};font-size:15px;font-weight:600">${pct}%</span><span style="color:var(--text-muted);font-size:11px"> disp.</span></div>
+      </div>
+    `;
+  }
+}
+
+
+
+// ── DELETE TICKET ─────────────────────────────────────────────────────────────
+function confirmDeleteTicket(id){ deleteTicketId=id; render(); }
+function cancelDeleteTicket(){ deleteTicketId=null; render(); }
+
+function renderDeleteTicketConfirm(){
+  const t = tickets.find(x=>x.id===deleteTicketId); if(!t) return '';
+  return `<div class="modal-overlay" onclick="if(event.target===this)cancelDeleteTicket()">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-head">
+      <div class="modal-title" style="color:var(--red)">Excluir Chamado</div>
+      <button class="icon-btn" onclick="cancelDeleteTicket()">${IC.x}</button>
+    </div>
+    <div class="modal-body" style="text-align:center;padding:28px 24px">
+      <div style="width:52px;height:52px;border-radius:50%;background:rgba(255,61,87,.1);border:2px solid rgba(255,61,87,.3);display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+      </div>
+      <div style="font-size:11px;color:var(--accent);font-family:monospace;margin-bottom:6px">${t.id}</div>
+      <div style="font-size:15px;font-weight:500;color:var(--text);margin-bottom:8px">${t.title}</div>
+      <div style="font-size:13px;color:var(--text-muted);line-height:1.6">Esta ação não pode ser desfeita.<br/>Todo o histórico do chamado será perdido.</div>
+    </div>
+    <div class="modal-foot" style="justify-content:space-between">
+      <button class="btn btn-ghost" onclick="cancelDeleteTicket()">Cancelar</button>
+      <button class="btn btn-danger" onclick="executeDeleteTicket('${t.id}')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        Confirmar Exclusão
+      </button>
+    </div>
+  </div></div>`;
+}
+
+async function executeDeleteTicket(id){
+  try {
+    await sbDelete('tickets','id=eq.'+id);
+    showToast('✓ Chamado excluído');
+  } catch(e){
+    showToast('⚠ Removido localmente');
+  }
+  tickets = tickets.filter(t=>t.id!==id);
+  deleteTicketId = null;
+  render();
 }
 
 // ── BOOT ─────────────────────────────────────────────────────────────────────
