@@ -1313,6 +1313,12 @@ function renderImportModal(){
           <div style="background:var(--bg3);border:1px solid rgba(255,61,87,.3);border-radius:8px;padding:14px;text-align:center"><div style="font-size:26px;font-weight:300;color:var(--red)">${off}</div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Offline</div></div>
         </div>
         <div style="padding:10px 14px;background:rgba(255,196,0,.07);border:1px solid rgba(255,196,0,.3);border-radius:6px;font-size:12px;color:var(--yellow)">⚠ Substituirá as ${CAMERAS.length} câmeras atuais pelas ${s.cameras.length} do novo arquivo.</div>
+        <div style="margin-top:10px;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--text-muted)">
+          <strong style="color:var(--text-dim)">Verifique as cores detectadas:</strong><br/>
+          <span style="color:var(--green)">● Verde (online): ${s.cameras.filter(c=>c.status==='online').length} câmeras</span> &nbsp; 
+          <span style="color:var(--red)">● Vermelho (offline): ${s.cameras.filter(c=>c.status==='offline').length} câmeras</span><br/>
+          <span style="color:var(--text-muted);font-size:10px;margin-top:4px;display:block">Se as cores estiverem invertidas, verifique o Console (F12) para ver os estilos detectados.</span>
+        </div>
       </div>`:''}
       ${s.status==='error'?`<div style="text-align:center;padding:40px 0"><div style="font-size:40px;margin-bottom:14px">❌</div><div style="font-size:14px;font-weight:500;color:var(--red)">Erro ao processar arquivo</div><div style="font-size:12px;color:var(--text-muted);margin-top:8px">${s.log[s.log.length-1]||''}</div><button class="btn btn-ghost btn-sm" style="margin-top:18px" onclick="importState={status:'idle',log:[],cameras:null};render()">Tentar novamente</button></div>`:''}
       ${s.status==='done'?`<div style="text-align:center;padding:40px 0"><div style="font-size:40px;margin-bottom:14px">✅</div><div style="font-size:14px;font-weight:500;color:var(--green)">Importação concluída!</div><div style="font-size:12px;color:var(--text-dim);margin-top:8px">${s.cameras.length} câmeras carregadas</div></div>`:''}
@@ -1348,29 +1354,108 @@ function handleKmzFile(file){
   reader.readAsArrayBuffer(file);
 }
 function parseKml(kmlText){
-  const doc=new DOMParser().parseFromString(kmlText,'text/xml');
-  const styleMap={};
-  doc.querySelectorAll('Style').forEach(s=>{
-    const id='#'+(s.getAttribute('id')||'');
-    const href=s.querySelector('href')?.textContent||'';
-    if(id.includes('ci-2')||href.includes('icon-2')) styleMap[id]='online';
-    else if(id.includes('ci-1')||href.includes('icon-1')) styleMap[id]='offline';
+  const doc = new DOMParser().parseFromString(kmlText,'text/xml');
+
+  // Step 1: Build style color map from <Style> elements
+  // Check icon href URL for color clues
+  const styleColors = {};
+  doc.querySelectorAll('Style').forEach(s => {
+    const id = s.getAttribute('id') || '';
+    const href = (s.querySelector('IconStyle href, href')?.textContent || '').toLowerCase();
+    const color = (s.querySelector('IconStyle color, color')?.textContent || '').toLowerCase();
+
+    let status = null;
+
+    // Check by style id name patterns
+    if(/offline|red|vermelho|ci-1|icon-1|deslig/i.test(id)) status = 'offline';
+    else if(/online|green|verde|ci-2|icon-2|lig/i.test(id)) status = 'online';
+
+    // Check by icon href URL content
+    if(!status){
+      if(/red|ff0000|e51c23|f44336|vermelho/i.test(href)) status = 'offline';
+      else if(/green|00e676|4caf50|verde|0f9d58/i.test(href)) status = 'online';
+    }
+
+    // Check by KML color value (AABBGGRR format - red = FF0000FF -> last bytes)
+    if(!status && color){
+      // KML color is AABBGGRR
+      // Red: low R bytes (last 2 chars), high B bytes
+      // Green: high G bytes (middle), low R bytes
+      if(color.endsWith('ff') && color.startsWith('ff00')) status = 'offline'; // blue-ish = offline
+      if(/ff00(ff|[89a-f][0-9a-f])00/i.test(color)) status = 'online'; // green
+    }
+
+    if(status) styleColors['#'+id] = status;
   });
-  const cameras=[];
-  doc.querySelectorAll('Placemark').forEach((pm,i)=>{
-    const name=pm.querySelector('name')?.textContent?.trim()||'Ponto '+(i+1);
-    const style=pm.querySelector('styleUrl')?.textContent?.trim()||'';
-    const coordStr=pm.querySelector('coordinates')?.textContent?.trim();
+
+  // Step 2: Resolve <StyleMap> -> actual Style
+  const styleMapResolve = {};
+  doc.querySelectorAll('StyleMap').forEach(sm => {
+    const smId = '#'+(sm.getAttribute('id')||'');
+    // Get the 'normal' pair styleUrl
+    const pairs = sm.querySelectorAll('Pair');
+    pairs.forEach(pair => {
+      const key = pair.querySelector('key')?.textContent?.trim();
+      if(key === 'normal'){
+        const url = pair.querySelector('styleUrl')?.textContent?.trim();
+        if(url && styleColors[url]) styleMapResolve[smId] = styleColors[url];
+      }
+    });
+    // Fallback: first pair
+    if(!styleMapResolve[smId] && pairs.length > 0){
+      const url = pairs[0].querySelector('styleUrl')?.textContent?.trim();
+      if(url && styleColors[url]) styleMapResolve[smId] = styleColors[url];
+    }
+  });
+
+  // Combined lookup: StyleMap id -> status OR Style id -> status
+  const lookup = {...styleColors, ...styleMapResolve};
+
+  // Step 3: Parse Placemarks
+  const cameras = [];
+  doc.querySelectorAll('Placemark').forEach((pm, i) => {
+    const name = pm.querySelector('name')?.textContent?.trim() || 'Ponto '+(i+1);
+    const styleUrl = pm.querySelector('styleUrl')?.textContent?.trim() || '';
+    const coordStr = pm.querySelector('coordinates')?.textContent?.trim();
     if(!coordStr) return;
-    const parts=coordStr.split(',');
-    const lng=parseFloat(parts[0]),lat=parseFloat(parts[1]);
+
+    const parts = coordStr.split(',');
+    const lng = parseFloat(parts[0]), lat = parseFloat(parts[1]);
     if(isNaN(lat)||isNaN(lng)) return;
-    let status=styleMap[style]||(style.includes('ci-1')?'offline':style.includes('ci-2')?'online':'online');
-    const nameParts=name.split(' - ');
-    const pnum=nameParts[0].replace('Ponto','').trim();
-    const addr=nameParts.length>1?nameParts.slice(1).join(' - '):name;
-    cameras.push({id:i+1,name:'CAM-'+String(pnum).padStart(3,'0'),address:addr,lat,lng,status,ip:'192.168.'+(Math.floor(i/254)+1)+'.'+(i%254+1),model:'Intelbras/Hikvision',location:addr});
+
+    // Determine status
+    let status = lookup[styleUrl];
+    if(!status){
+      // Try direct id match without '#'
+      const bare = styleUrl.replace('#','');
+      status = Object.entries(lookup).find(([k])=>k.replace('#','')===bare)?.[1];
+    }
+    if(!status){
+      // Last resort: check styleUrl string itself
+      if(/offline|red|vermelho|ci-1|icon-1|deslig/i.test(styleUrl)) status = 'offline';
+      else if(/online|green|verde|ci-2|icon-2|lig/i.test(styleUrl)) status = 'online';
+      else status = 'offline'; // CHANGED: default to offline (safer than showing wrong green)
+    }
+
+    const nameParts = name.split(' - ');
+    const pnum = nameParts[0].replace('Ponto','').trim();
+    const addr = nameParts.length > 1 ? nameParts.slice(1).join(' - ') : name;
+
+    cameras.push({
+      id: i+1,
+      name: 'CAM-'+String(pnum).padStart(3,'0'),
+      address: addr, lat, lng, status,
+      ip: '192.168.'+(Math.floor(i/254)+1)+'.'+(i%254+1),
+      model: 'Intelbras/Hikvision',
+      location: addr
+    });
   });
+
+  console.log('KMZ parsed:', cameras.length, 'cameras,',
+    cameras.filter(c=>c.status==='online').length, 'online,',
+    cameras.filter(c=>c.status==='offline').length, 'offline');
+  console.log('Styles found:', Object.entries(lookup).map(([k,v])=>k+'='+v).join(', '));
+
   return cameras;
 }
 async function applyImport(){
