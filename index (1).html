@@ -145,6 +145,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Roboto
 .tk-list{display:flex;flex-direction:column;gap:10px;}
 .tk-card{background:var(--bg3);border:1px solid rgba(202,157,74,.1);border-radius:10px;padding:14px;cursor:pointer;transition:all .2s;}
 .tk-card:hover{border-color:var(--accent);}
+.tk-del-btn{background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px 6px;border-radius:4px;transition:all .2s;flex-shrink:0;display:flex;align-items:center;}
+.tk-del-btn:hover{color:var(--red);background:rgba(255,61,87,.1);}
 .tk-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;}
 .tk-id{font-size:11px;color:var(--accent);font-family:monospace;font-weight:600;margin-bottom:2px;}
 .tk-title{font-size:14px;font-weight:500;letter-spacing:.2px;}
@@ -531,7 +533,9 @@ let USERS = [], tickets = [];
 let leafletMap = null, markersLayer = null, selectedCam = null;
 let openTicketId = null, showNewTicket = false, showImportModal = false;
 let camHistoryId = null, previewImg = null;
-let showUserModal = false, editUserId = null, deleteUserId = null, showChangePassword = false;
+let showUserModal = false, editUserId = null, deleteUserId = null, showChangePassword = false, deleteTicketId = null;
+let manualStats = null; // {total, online} when manually overridden
+let showEditStats = false;
 let mapFilter = 'all', mapSearch = '', camFilter = 'all', camSearch = '';
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
@@ -542,8 +546,9 @@ const effRole   = () => currentUser.role==='admin' ? viewAs : currentUser.role;
 const openTks   = () => tickets.filter(t=>t.status!=='Finalizado');
 const myTks     = () => currentUser.role==='tech' ? tickets.filter(t=>t.tech_id===currentUser.id) : tickets;
 const techs     = () => USERS.filter(u=>u.role==='tech');
-const getOnline  = () => CAMERAS.filter(c=>c.status==='online').length;
-const getOffline = () => CAMERAS.filter(c=>c.status==='offline').length;
+const getOnline  = () => manualStats!==null ? manualStats.online : CAMERAS.filter(c=>c.status==='online').length;
+const getOffline = () => manualStats!==null ? manualStats.total-manualStats.online : CAMERAS.filter(c=>c.status==='offline').length;
+const getTotal   = () => manualStats!==null ? manualStats.total : CAMERAS.length;
 const makeAvatar = n => n.split(' ').filter((_,i,a)=>i===0||i===a.length-1).map(w=>w[0]||'').join('').toUpperCase().slice(0,2)||'??';
 const roleLabel  = r => r==='admin'?'Administrador':r==='tech'?'Técnico':'Cliente';
 const roleClass  = r => r==='admin'?'s-tecnico':r==='tech'?'s-reconhecido':'s-finalizado';
@@ -576,6 +581,7 @@ const IC={
   ticket:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5v2M15 11v2M15 17v2M5 5h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V7a2 2 0 0 1 2-2z"/></svg>`,
   users:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
   key:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>`,
+  chart:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>`,
   logout:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
   plus:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
   x:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
@@ -594,6 +600,8 @@ const IC={
 
 // ── INIT — load data from Supabase ────────────────────────────────────────────
 async function init(){
+  loadChartData();
+  await loadManualStats();
   setLoading(true);
   try {
     // Load users
@@ -699,9 +707,9 @@ function renderShell(){
     {id:'dashboard',label:'Dashboard',icon:'dash'},
     {id:'cameras',label:'Câmeras',icon:'cam'},
     {id:'tickets',label:'Chamados',icon:'ticket',badge:er!=='client'?openTks().length:0},
-    ...(er==='admin'?[{id:'users',label:'Usuários',icon:'users'}]:[]),
+    ...(er==='admin'?[{id:'users',label:'Usuários',icon:'users'},{id:'grafico',label:'Gráfico',icon:'chart'}]:[]),
   ];
-  const titles={dashboard:'Dashboard',cameras:'Câmeras',tickets:'Chamados',users:'Usuários'};
+  const titles={dashboard:'Dashboard',cameras:'Câmeras',tickets:'Chamados',users:'Usuários',grafico:'Gráfico'};
   return `<div class="app">
     <aside class="sidebar">
       <div class="sb-logo"><img src="data:image/png;base64,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" style="height:34px;object-fit:contain"/></div>
@@ -741,7 +749,9 @@ function renderShell(){
   ${previewImg?renderImgPreview():''}
   ${showUserModal?renderUserModal():''}
   ${deleteUserId?renderDeleteConfirm():''}
-  ${showChangePassword?renderChangePasswordModal():''}`;
+  ${showChangePassword?renderChangePasswordModal():''}
+  ${deleteTicketId?renderDeleteTicketConfirm():''}
+  ${showEditStats?renderEditStatsModal():''}`;
 }
 
 function renderPage(){
@@ -749,6 +759,7 @@ function renderPage(){
   if(page==='cameras')   return renderCameras();
   if(page==='tickets')   return renderTickets();
   if(page==='users')     return renderUsers();
+  if(page==='grafico')   return renderGrafico();
   return '';
 }
 
@@ -758,6 +769,22 @@ function renderDashboard(){
   const on=getOnline(),off=getOffline(),tot=CAMERAS.length,pct=Math.round(on/tot*100);
   const tks=er==='tech'?myTks():tickets;
   return `
+  ${er==='admin'?`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+    <div style="font-size:11px">
+      ${manualStats
+        ? '<span style=\"background:rgba(255,196,0,.1);color:var(--yellow);border:1px solid rgba(255,196,0,.3);padding:2px 10px;border-radius:20px;font-size:11px\">⚙ Valores editados manualmente</span>'
+        : '<span style=\"color:var(--text-muted)\">Valores do último KMZ importado</span>'
+      }
+    </div>
+    <div style="display:flex;gap:6px">
+      <button class=\"btn btn-ghost btn-sm\" onclick=\"showEditStats=true;render()\">
+        <svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"/><path d=\"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z\"/></svg>
+        Editar Valores
+      </button>
+      ${manualStats?'<button class=\"btn btn-danger btn-sm\" onclick=\"restoreKmzStats()\">↩ Restaurar KMZ</button>':''}
+    </div>
+  </div>`:''}
+
   <div class="stats-grid">
     <div class="stat-card sc-blue"><div class="sc-icon ic-blue">${IC.cam}</div><div class="sc-val">${tot}</div><div class="sc-lbl">Total</div><div class="sc-sub">câmeras</div></div>
     <div class="stat-card sc-green"><div class="sc-icon ic-green">${IC.check}</div><div class="sc-val" style="color:var(--green)">${on}</div><div class="sc-lbl">Online</div><div class="sc-sub" style="color:var(--green)">operacionais</div></div>
@@ -765,6 +792,8 @@ function renderDashboard(){
     <div class="stat-card sc-yellow"><div class="sc-icon ic-yellow">${IC.eye}</div><div class="sc-val" style="color:var(--yellow)">${pct}%</div><div class="sc-lbl">Disponibilidade</div><div class="sc-sub">${on}/${tot} câmeras</div></div>
     <div class="stat-card sc-accent"><div class="sc-icon ic-accent">${IC.ticket}</div><div class="sc-val" style="color:var(--accent)">${openTks().length}</div><div class="sc-lbl">Tickets Abertos</div><div class="sc-sub">${tickets.filter(t=>t.status==='Finalizado').length} finalizados</div></div>
   </div>
+  ${renderDashboardChart()}
+
   <div class="card">
     <div class="card-header">
       <div class="card-title">${IC.cam} Mapa de Câmeras — Goiânia, GO</div>
@@ -853,10 +882,17 @@ function renderTickets(){
 function tkCard(t){
   const cam=CAMERAS.find(c=>c.id===t.cameraId);
   const tech=USERS.find(u=>u.id===t.techId||u.id===t.tech_id);
+  const er=effRole();
+  const canDelete = er==='admin' || (currentUser && t.requester?.email===currentUser.email && t.status==='Aberto');
   return `<div class="tk-card" onclick="viewTicket('${t.id}')">
     <div class="tk-head">
-      <div><div class="tk-id">${t.id}</div><div class="tk-title">${t.title}</div></div>
-      <span class="tk-badge badge ${statusClass(t.status)}">${t.status}</span>
+      <div style="flex:1;min-width:0"><div class="tk-id">${t.id}</div><div class="tk-title">${t.title}</div></div>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+        <span class="tk-badge badge ${statusClass(t.status)}">${t.status}</span>
+        ${canDelete?`<button class="tk-del-btn" onclick="event.stopPropagation();confirmDeleteTicket('${t.id}')" title="Excluir chamado">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        </button>`:''}
+      </div>
     </div>
     <div class="tk-meta">
       <span>${t.requester?.name||''}</span><span>·</span>
@@ -1024,6 +1060,9 @@ function renderTicketModal(){
       <div><div style="font-size:11px;color:var(--accent);font-family:monospace;margin-bottom:3px">${t.id}</div><div class="modal-title">${t.title}</div></div>
       <div style="display:flex;align-items:center;gap:10px">
         <span class="badge ${statusClass(t.status)}">${t.status}</span>
+        ${(er==='admin'||(t.requester?.email===currentUser.email&&t.status==='Aberto'))?`<button class="btn btn-danger btn-sm" onclick="closeTicket();confirmDeleteTicket('${t.id}')" title="Excluir chamado">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg> Excluir
+        </button>`:''}
         <button class="icon-btn" onclick="closeTicket()">${IC.x}</button>
       </div>
     </div>
@@ -1274,6 +1313,12 @@ function renderImportModal(){
           <div style="background:var(--bg3);border:1px solid rgba(255,61,87,.3);border-radius:8px;padding:14px;text-align:center"><div style="font-size:26px;font-weight:300;color:var(--red)">${off}</div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Offline</div></div>
         </div>
         <div style="padding:10px 14px;background:rgba(255,196,0,.07);border:1px solid rgba(255,196,0,.3);border-radius:6px;font-size:12px;color:var(--yellow)">⚠ Substituirá as ${CAMERAS.length} câmeras atuais pelas ${s.cameras.length} do novo arquivo.</div>
+        <div style="margin-top:10px;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--text-muted)">
+          <strong style="color:var(--text-dim)">Verifique as cores detectadas:</strong><br/>
+          <span style="color:var(--green)">● Verde (online): ${s.cameras.filter(c=>c.status==='online').length} câmeras</span> &nbsp; 
+          <span style="color:var(--red)">● Vermelho (offline): ${s.cameras.filter(c=>c.status==='offline').length} câmeras</span><br/>
+          <span style="color:var(--text-muted);font-size:10px;margin-top:4px;display:block">Se as cores estiverem invertidas, verifique o Console (F12) para ver os estilos detectados.</span>
+        </div>
       </div>`:''}
       ${s.status==='error'?`<div style="text-align:center;padding:40px 0"><div style="font-size:40px;margin-bottom:14px">❌</div><div style="font-size:14px;font-weight:500;color:var(--red)">Erro ao processar arquivo</div><div style="font-size:12px;color:var(--text-muted);margin-top:8px">${s.log[s.log.length-1]||''}</div><button class="btn btn-ghost btn-sm" style="margin-top:18px" onclick="importState={status:'idle',log:[],cameras:null};render()">Tentar novamente</button></div>`:''}
       ${s.status==='done'?`<div style="text-align:center;padding:40px 0"><div style="font-size:40px;margin-bottom:14px">✅</div><div style="font-size:14px;font-weight:500;color:var(--green)">Importação concluída!</div><div style="font-size:12px;color:var(--text-dim);margin-top:8px">${s.cameras.length} câmeras carregadas</div></div>`:''}
@@ -1309,29 +1354,108 @@ function handleKmzFile(file){
   reader.readAsArrayBuffer(file);
 }
 function parseKml(kmlText){
-  const doc=new DOMParser().parseFromString(kmlText,'text/xml');
-  const styleMap={};
-  doc.querySelectorAll('Style').forEach(s=>{
-    const id='#'+(s.getAttribute('id')||'');
-    const href=s.querySelector('href')?.textContent||'';
-    if(id.includes('ci-2')||href.includes('icon-2')) styleMap[id]='online';
-    else if(id.includes('ci-1')||href.includes('icon-1')) styleMap[id]='offline';
+  const doc = new DOMParser().parseFromString(kmlText,'text/xml');
+
+  // Step 1: Build style color map from <Style> elements
+  // Check icon href URL for color clues
+  const styleColors = {};
+  doc.querySelectorAll('Style').forEach(s => {
+    const id = s.getAttribute('id') || '';
+    const href = (s.querySelector('IconStyle href, href')?.textContent || '').toLowerCase();
+    const color = (s.querySelector('IconStyle color, color')?.textContent || '').toLowerCase();
+
+    let status = null;
+
+    // Check by style id name patterns
+    if(/offline|red|vermelho|ci-1|icon-1|deslig/i.test(id)) status = 'offline';
+    else if(/online|green|verde|ci-2|icon-2|lig/i.test(id)) status = 'online';
+
+    // Check by icon href URL content
+    if(!status){
+      if(/red|ff0000|e51c23|f44336|vermelho/i.test(href)) status = 'offline';
+      else if(/green|00e676|4caf50|verde|0f9d58/i.test(href)) status = 'online';
+    }
+
+    // Check by KML color value (AABBGGRR format - red = FF0000FF -> last bytes)
+    if(!status && color){
+      // KML color is AABBGGRR
+      // Red: low R bytes (last 2 chars), high B bytes
+      // Green: high G bytes (middle), low R bytes
+      if(color.endsWith('ff') && color.startsWith('ff00')) status = 'offline'; // blue-ish = offline
+      if(/ff00(ff|[89a-f][0-9a-f])00/i.test(color)) status = 'online'; // green
+    }
+
+    if(status) styleColors['#'+id] = status;
   });
-  const cameras=[];
-  doc.querySelectorAll('Placemark').forEach((pm,i)=>{
-    const name=pm.querySelector('name')?.textContent?.trim()||'Ponto '+(i+1);
-    const style=pm.querySelector('styleUrl')?.textContent?.trim()||'';
-    const coordStr=pm.querySelector('coordinates')?.textContent?.trim();
+
+  // Step 2: Resolve <StyleMap> -> actual Style
+  const styleMapResolve = {};
+  doc.querySelectorAll('StyleMap').forEach(sm => {
+    const smId = '#'+(sm.getAttribute('id')||'');
+    // Get the 'normal' pair styleUrl
+    const pairs = sm.querySelectorAll('Pair');
+    pairs.forEach(pair => {
+      const key = pair.querySelector('key')?.textContent?.trim();
+      if(key === 'normal'){
+        const url = pair.querySelector('styleUrl')?.textContent?.trim();
+        if(url && styleColors[url]) styleMapResolve[smId] = styleColors[url];
+      }
+    });
+    // Fallback: first pair
+    if(!styleMapResolve[smId] && pairs.length > 0){
+      const url = pairs[0].querySelector('styleUrl')?.textContent?.trim();
+      if(url && styleColors[url]) styleMapResolve[smId] = styleColors[url];
+    }
+  });
+
+  // Combined lookup: StyleMap id -> status OR Style id -> status
+  const lookup = {...styleColors, ...styleMapResolve};
+
+  // Step 3: Parse Placemarks
+  const cameras = [];
+  doc.querySelectorAll('Placemark').forEach((pm, i) => {
+    const name = pm.querySelector('name')?.textContent?.trim() || 'Ponto '+(i+1);
+    const styleUrl = pm.querySelector('styleUrl')?.textContent?.trim() || '';
+    const coordStr = pm.querySelector('coordinates')?.textContent?.trim();
     if(!coordStr) return;
-    const parts=coordStr.split(',');
-    const lng=parseFloat(parts[0]),lat=parseFloat(parts[1]);
+
+    const parts = coordStr.split(',');
+    const lng = parseFloat(parts[0]), lat = parseFloat(parts[1]);
     if(isNaN(lat)||isNaN(lng)) return;
-    let status=styleMap[style]||(style.includes('ci-1')?'offline':style.includes('ci-2')?'online':'online');
-    const nameParts=name.split(' - ');
-    const pnum=nameParts[0].replace('Ponto','').trim();
-    const addr=nameParts.length>1?nameParts.slice(1).join(' - '):name;
-    cameras.push({id:i+1,name:'CAM-'+String(pnum).padStart(3,'0'),address:addr,lat,lng,status,ip:'192.168.'+(Math.floor(i/254)+1)+'.'+(i%254+1),model:'Intelbras/Hikvision',location:addr});
+
+    // Determine status
+    let status = lookup[styleUrl];
+    if(!status){
+      // Try direct id match without '#'
+      const bare = styleUrl.replace('#','');
+      status = Object.entries(lookup).find(([k])=>k.replace('#','')===bare)?.[1];
+    }
+    if(!status){
+      // Last resort: check styleUrl string itself
+      if(/offline|red|vermelho|ci-1|icon-1|deslig/i.test(styleUrl)) status = 'offline';
+      else if(/online|green|verde|ci-2|icon-2|lig/i.test(styleUrl)) status = 'online';
+      else status = 'offline'; // CHANGED: default to offline (safer than showing wrong green)
+    }
+
+    const nameParts = name.split(' - ');
+    const pnum = nameParts[0].replace('Ponto','').trim();
+    const addr = nameParts.length > 1 ? nameParts.slice(1).join(' - ') : name;
+
+    cameras.push({
+      id: i+1,
+      name: 'CAM-'+String(pnum).padStart(3,'0'),
+      address: addr, lat, lng, status,
+      ip: '192.168.'+(Math.floor(i/254)+1)+'.'+(i%254+1),
+      model: 'Intelbras/Hikvision',
+      location: addr
+    });
   });
+
+  console.log('KMZ parsed:', cameras.length, 'cameras,',
+    cameras.filter(c=>c.status==='online').length, 'online,',
+    cameras.filter(c=>c.status==='offline').length, 'offline');
+  console.log('Styles found:', Object.entries(lookup).map(([k,v])=>k+'='+v).join(', '));
+
   return cameras;
 }
 async function applyImport(){
@@ -1619,6 +1743,615 @@ async function colocarPendente(id){
   const motivo = document.getElementById('pend-motivo')?.value?.trim();
   if(!motivo){ alert('Descreva o motivo da pendência.'); return; }
   await advanceTicket(id, 'Pendente', 'Chamado colocado em pendência. Motivo: ' + motivo, {pendMotivo: motivo});
+}
+
+
+// ── CHART DATA ────────────────────────────────────────────────────────────────
+// All days from Feb-Dec 2026
+const ALL_DAYS = ["2026-02-01", "2026-02-02", "2026-02-03", "2026-02-04", "2026-02-05", "2026-02-06", "2026-02-07", "2026-02-08", "2026-02-09", "2026-02-10", "2026-02-11", "2026-02-12", "2026-02-13", "2026-02-14", "2026-02-15", "2026-02-16", "2026-02-17", "2026-02-18", "2026-02-19", "2026-02-20", "2026-02-21", "2026-02-22", "2026-02-23", "2026-02-24", "2026-02-25", "2026-02-26", "2026-02-27", "2026-02-28", "2026-03-01", "2026-03-02", "2026-03-03", "2026-03-04", "2026-03-05", "2026-03-06", "2026-03-07", "2026-03-08", "2026-03-09", "2026-03-10", "2026-03-11", "2026-03-12", "2026-03-13", "2026-03-14", "2026-03-15", "2026-03-16", "2026-03-17", "2026-03-18", "2026-03-19", "2026-03-20", "2026-03-21", "2026-03-22", "2026-03-23", "2026-03-24", "2026-03-25", "2026-03-26", "2026-03-27", "2026-03-28", "2026-03-29", "2026-03-30", "2026-03-31", "2026-04-01", "2026-04-02", "2026-04-03", "2026-04-04", "2026-04-05", "2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09", "2026-04-10", "2026-04-11", "2026-04-12", "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16", "2026-04-17", "2026-04-18", "2026-04-19", "2026-04-20", "2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24", "2026-04-25", "2026-04-26", "2026-04-27", "2026-04-28", "2026-04-29", "2026-04-30", "2026-05-01", "2026-05-02", "2026-05-03", "2026-05-04", "2026-05-05", "2026-05-06", "2026-05-07", "2026-05-08", "2026-05-09", "2026-05-10", "2026-05-11", "2026-05-12", "2026-05-13", "2026-05-14", "2026-05-15", "2026-05-16", "2026-05-17", "2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21", "2026-05-22", "2026-05-23", "2026-05-24", "2026-05-25", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-05-30", "2026-05-31", "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07", "2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11", "2026-06-12", "2026-06-13", "2026-06-14", "2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20", "2026-06-21", "2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26", "2026-06-27", "2026-06-28", "2026-06-29", "2026-06-30", "2026-07-01", "2026-07-02", "2026-07-03", "2026-07-04", "2026-07-05", "2026-07-06", "2026-07-07", "2026-07-08", "2026-07-09", "2026-07-10", "2026-07-11", "2026-07-12", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-18", "2026-07-19", "2026-07-20", "2026-07-21", "2026-07-22", "2026-07-23", "2026-07-24", "2026-07-25", "2026-07-26", "2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30", "2026-07-31", "2026-08-01", "2026-08-02", "2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07", "2026-08-08", "2026-08-09", "2026-08-10", "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14", "2026-08-15", "2026-08-16", "2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20", "2026-08-21", "2026-08-22", "2026-08-23", "2026-08-24", "2026-08-25", "2026-08-26", "2026-08-27", "2026-08-28", "2026-08-29", "2026-08-30", "2026-08-31", "2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-05", "2026-09-06", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-12", "2026-09-13", "2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-19", "2026-09-20", "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-25", "2026-09-26", "2026-09-27", "2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04", "2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09", "2026-10-10", "2026-10-11", "2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17", "2026-10-18", "2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23", "2026-10-24", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06", "2026-11-07", "2026-11-08", "2026-11-09", "2026-11-10", "2026-11-11", "2026-11-12", "2026-11-13", "2026-11-14", "2026-11-15", "2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21", "2026-11-22", "2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26", "2026-11-27", "2026-11-28", "2026-11-29", "2026-11-30", "2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04", "2026-12-05", "2026-12-06", "2026-12-07", "2026-12-08", "2026-12-09", "2026-12-10", "2026-12-11", "2026-12-12", "2026-12-13", "2026-12-14", "2026-12-15", "2026-12-16", "2026-12-17", "2026-12-18", "2026-12-19", "2026-12-20", "2026-12-21", "2026-12-22", "2026-12-23", "2026-12-24", "2026-12-25", "2026-12-26", "2026-12-27", "2026-12-28", "2026-12-29", "2026-12-30", "2026-12-31"];
+
+// chartData: {date: 'YYYY-MM-DD', online: number|null}
+let chartData = ALL_DAYS.map(d => ({date:d, online:null}));
+
+
+function restoreKmzStats(){
+  manualStats=null;
+  saveManualStats();
+  showEditStats=false;
+  showToast('Valores restaurados para o KMZ!');
+  render();
+}
+async function saveManualStats(){
+  // Save to Supabase so ALL users see the same values
+  try {
+    const val = manualStats ? JSON.stringify(manualStats) : null;
+    // Try upsert into settings table
+    const resp = await fetch(`${SB_URL}/rest/v1/settings`, {
+      method: 'POST',
+      headers: {...SB_HEADERS, 'Prefer': 'return=minimal,resolution=merge-duplicates'},
+      body: JSON.stringify({key:'manual_stats', value: manualStats||null, updated_at: new Date().toISOString()})
+    });
+    if(!resp.ok) throw new Error('settings save failed');
+  } catch(e){
+    // Fallback to localStorage if Supabase fails
+    try{ if(manualStats) localStorage.setItem('brilha_stats',JSON.stringify(manualStats)); else localStorage.removeItem('brilha_stats'); }catch(e2){}
+  }
+}
+async function loadManualStats(){
+  // Load from Supabase first
+  try {
+    const data = await sbGet('settings','select=value&key=eq.manual_stats&limit=1');
+    if(data && data.length>0 && data[0].value){
+      manualStats = data[0].value;
+      return;
+    } else {
+      manualStats = null;
+      return;
+    }
+  } catch(e){
+    // Fallback to localStorage
+    try{ const s=localStorage.getItem('brilha_stats'); if(s) manualStats=JSON.parse(s); }catch(e2){}
+  }
+}
+function saveChartData(){
+  try{ localStorage.setItem('brilha_chart', JSON.stringify(chartData)); }catch(e){}
+}
+function loadChartData(){
+  try{
+    const saved = localStorage.getItem('brilha_chart');
+    if(saved){
+      const parsed = JSON.parse(saved);
+      chartData = ALL_DAYS.map(d => {
+        const found = parsed.find(x=>x.date===d);
+        return found || {date:d,online:null};
+      });
+    }
+  }catch(e){}
+}
+
+function getChartProjection(){
+  const filled = chartData.filter(d=>d.online!==null);
+  if(filled.length < 2) return null;
+  // Simple linear regression on last 14 days of data
+  const recent = filled.slice(-14);
+  const n = recent.length;
+  const indices = recent.map((_,i)=>i);
+  const values  = recent.map(d=>d.online);
+  const meanX = indices.reduce((a,b)=>a+b,0)/n;
+  const meanY = values.reduce((a,b)=>a+b,0)/n;
+  const num = indices.reduce((s,x,i)=>s+(x-meanX)*(values[i]-meanY),0);
+  const den = indices.reduce((s,x)=>s+(x-meanX)**2,0);
+  const slope = den!==0 ? num/den : 0;
+  const intercept = meanY - slope*meanX;
+  // Project next 30 days from last filled day
+  const lastIdx = chartData.findIndex(d=>d.date===filled[filled.length-1].date);
+  const projection = [];
+  const total = getTotal();
+  for(let i=1;i<=30;i++){
+    const dayIdx = lastIdx+i;
+    if(dayIdx>=chartData.length) break;
+    const projected = Math.round(intercept + slope*(n-1+i));
+    const clamped = Math.max(0,Math.min(total,projected));
+    projection.push({date:chartData[dayIdx].date, online:clamped});
+  }
+  return projection;
+}
+
+
+// ── RENDER GRÁFICO ────────────────────────────────────────────────────────────
+let chartMonth = new Date().getMonth(); // 0=Jan
+let chartYear  = 2026;
+const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+function renderGrafico(){
+  // Get days for current month
+  const monthDays = chartData.filter(d=>{
+    const dt = new Date(d.date+'T12:00:00');
+    return dt.getMonth()===chartMonth && dt.getFullYear()===chartYear;
+  });
+  const filled    = chartData.filter(d=>d.online!==null);
+  const projection = getChartProjection();
+  const total     = getTotal();
+  const today     = new Date().toISOString().split('T')[0];
+
+  return `
+  <div style="max-width:1100px">
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:18px;font-weight:500;color:var(--text)">Evolução Diária de Câmeras</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Preencha o número de câmeras online a cada dia</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-ghost btn-sm" onclick="chartMonth=Math.max(1,chartMonth-1);render()" ${chartMonth<=1?'disabled':''}>‹</button>
+        <span style="font-size:14px;font-weight:500;min-width:120px;text-align:center">${MONTH_NAMES[chartMonth]} ${chartYear}</span>
+        <button class="btn btn-ghost btn-sm" onclick="chartMonth=Math.min(11,chartMonth+1);render()" ${chartMonth>=11?'disabled':''}>›</button>
+      </div>
+    </div>
+
+    <!-- Summary cards -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+      <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:10px;padding:14px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Dias Preenchidos</div>
+        <div style="font-size:26px;font-weight:300;color:var(--accent)">${filled.length}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:3px">de ${ALL_DAYS.length} dias</div>
+      </div>
+      <div style="background:var(--bg3);border:1px solid rgba(0,230,118,.2);border-radius:10px;padding:14px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Média Online</div>
+        <div style="font-size:26px;font-weight:300;color:var(--green)">${filled.length?Math.round(filled.reduce((s,d)=>s+d.online,0)/filled.length):'—'}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:3px">câmeras/dia</div>
+      </div>
+      <div style="background:var(--bg3);border:1px solid rgba(255,61,87,.2);border-radius:10px;padding:14px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Média Offline</div>
+        <div style="font-size:26px;font-weight:300;color:var(--red)">${filled.length?Math.round(filled.reduce((s,d)=>s+(total-d.online),0)/filled.length):'—'}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:3px">câmeras/dia</div>
+      </div>
+      <div style="background:var(--bg3);border:1px solid rgba(167,139,250,.2);border-radius:10px;padding:14px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Projeção (30d)</div>
+        <div style="font-size:26px;font-weight:300;color:var(--purple)">${projection&&projection.length?projection[projection.length-1].online+'':'—'}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:3px">online estimado</div>
+      </div>
+    </div>
+
+    <!-- Chart SVG -->
+    ${renderChartSVG(chartData, projection, total)}
+
+    <!-- Month table -->
+    <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:10px;overflow:hidden;margin-top:20px">
+      <div style="padding:14px 18px;border-bottom:1px solid rgba(202,157,74,.15);display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:14px;font-weight:500">${MONTH_NAMES[chartMonth]} ${chartYear}</div>
+        <div style="font-size:12px;color:var(--text-muted)">Total de câmeras: <strong style="color:var(--text)">${total}</strong></div>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="background:var(--bg4)">
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid rgba(202,157,74,.12)">Data</th>
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid rgba(202,157,74,.12)">Dia</th>
+              <th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:500;color:var(--green);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid rgba(202,157,74,.12)">Online</th>
+              <th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:500;color:var(--red);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid rgba(202,157,74,.12)">Offline</th>
+              <th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid rgba(202,157,74,.12)">Disp%</th>
+              <th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid rgba(202,157,74,.12)">Ação</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${monthDays.map((d,i)=>{
+              const dt = new Date(d.date+'T12:00:00');
+              const dayNames = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+              const dayName = dayNames[dt.getDay()];
+              const isWeekend = dt.getDay()===0||dt.getDay()===6;
+              const isToday = d.date===today;
+              const offline = d.online!==null ? total-d.online : null;
+              const pct = d.online!==null ? Math.round(d.online/total*100) : null;
+              const isFuture = d.date > today;
+              return `<tr style="border-bottom:1px solid rgba(202,157,74,.05);${isToday?'background:rgba(202,157,74,.06)':''}${isWeekend&&!isToday?'opacity:.7':''}" 
+                onmouseover="this.style.background='rgba(202,157,74,.04)'" 
+                onmouseout="this.style.background='${isToday?'rgba(202,157,74,.06)':'transparent'}'">
+                <td style="padding:9px 16px;font-weight:${isToday?'600':'400'};color:${isToday?'var(--accent)':'var(--text)'}">
+                  ${dt.getDate().toString().padStart(2,'0')}/${(dt.getMonth()+1).toString().padStart(2,'0')}
+                  ${isToday?'<span style="font-size:10px;background:rgba(202,157,74,.2);color:var(--accent);padding:1px 6px;border-radius:4px;margin-left:4px">HOJE</span>':''}
+                </td>
+                <td style="padding:9px 16px;color:${isWeekend?'var(--text-muted)':'var(--text-dim)'};font-size:12px">${dayName}</td>
+                <td style="padding:9px 16px;text-align:center">
+                  ${d.online!==null
+                    ? `<span style="color:var(--green);font-weight:500">${d.online}</span>`
+                    : `<span style="color:var(--text-muted);font-size:11px">${isFuture?'—':'Aguardando'}</span>`
+                  }
+                </td>
+                <td style="padding:9px 16px;text-align:center">
+                  ${offline!==null
+                    ? `<span style="color:var(--red);font-weight:500">${offline}</span>`
+                    : '<span style="color:var(--text-muted)">—</span>'
+                  }
+                </td>
+                <td style="padding:9px 16px;text-align:center">
+                  ${pct!==null
+                    ? `<div style="display:flex;align-items:center;gap:6px;justify-content:center">
+                        <div style="width:50px;height:5px;background:var(--bg4);border-radius:3px;overflow:hidden">
+                          <div style="width:${pct}%;height:100%;background:${pct>=80?'var(--green)':pct>=60?'var(--yellow)':'var(--red)'};border-radius:3px"></div>
+                        </div>
+                        <span style="font-size:11px;color:${pct>=80?'var(--green)':pct>=60?'var(--yellow)':'var(--red)'}">${pct}%</span>
+                      </div>`
+                    : '<span style="color:var(--text-muted)">—</span>'
+                  }
+                </td>
+                <td style="padding:9px 16px;text-align:center">
+                  ${!isFuture
+                    ? `<div style="display:flex;align-items:center;gap:4px;justify-content:center">
+                        <input type="number" min="0" max="${total}" 
+                          value="${d.online!==null?d.online:''}" 
+                          placeholder="0~${total}"
+                          style="width:70px;background:var(--bg4);border:1px solid ${isToday?'var(--accent)':'var(--border)'};color:var(--text);padding:4px 8px;border-radius:5px;font-size:12px;text-align:center;outline:none"
+                          onchange="updateChartDay('${d.date}',this.value)"
+                          onfocus="this.style.borderColor='var(--accent)'"
+                          onblur="this.style.borderColor='${isToday?'var(--accent)':'var(--border)'}'"
+                        />
+                      </div>`
+                    : '<span style="color:var(--text-muted);font-size:11px">—</span>'
+                  }
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderChartSVG(data, projection, total){
+  const W=1060, H=280, PAD={top:20,right:20,bottom:40,left:50};
+  const cW=W-PAD.left-PAD.right, cH=H-PAD.top-PAD.bottom;
+
+  // Only show filled data + projection
+  const filled = data.filter(d=>d.online!==null);
+  if(filled.length===0) return `<div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:10px;padding:40px;text-align:center;color:var(--text-muted)">
+    <div style="font-size:36px;margin-bottom:10px">📈</div>
+    <div style="font-size:14px;font-weight:500;color:var(--text)">Nenhum dado preenchido ainda</div>
+    <div style="font-size:12px;margin-top:6px">Preencha os valores na tabela abaixo para ver o gráfico</div>
+  </div>`;
+
+  // Combine filled + projection for x axis
+  const allPoints = [...filled, ...(projection||[])];
+  const minDate = new Date(allPoints[0].date+'T12:00:00');
+  const maxDate = new Date(allPoints[allPoints.length-1].date+'T12:00:00');
+  const dateRange = (maxDate-minDate)||1;
+
+  const xOf = d => PAD.left + ((new Date(d+'T12:00:00')-minDate)/dateRange)*cW;
+  const yOf = v => PAD.top + cH - (v/total)*cH;
+
+  // Build SVG paths
+  let onlinePath='', offlinePath='', projPath='', projOffPath='';
+  filled.forEach((d,i)=>{
+    const x=xOf(d.date), y=yOf(d.online), yo=yOf(total-d.online);
+    onlinePath  += (i===0?`M${x},${y}`:`L${x},${y}`);
+    offlinePath += (i===0?`M${x},${yo}`:`L${x},${yo}`);
+  });
+  if(projection&&projection.length){
+    const startX=xOf(filled[filled.length-1].date);
+    const startY=yOf(filled[filled.length-1].online);
+    const startYO=yOf(total-filled[filled.length-1].online);
+    projPath    = `M${startX},${startY}`;
+    projOffPath = `M${startX},${startYO}`;
+    projection.forEach(d=>{
+      projPath    += `L${xOf(d.date)},${yOf(d.online)}`;
+      projOffPath += `L${xOf(d.date)},${yOf(total-d.online)}`;
+    });
+  }
+
+  // Y axis ticks
+  const yTicks = [0,25,50,75,100].map(pct=>Math.round(total*pct/100));
+  // X axis labels (monthly)
+  const xLabels=[];
+  let cur=new Date(minDate); cur.setDate(1);
+  while(cur<=maxDate){
+    if(cur>=minDate){
+      const label=['Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][cur.getMonth()-1]||'';
+      xLabels.push({x:xOf(cur.toISOString().split('T')[0]),label});
+    }
+    cur.setMonth(cur.getMonth()+1);
+  }
+
+  return `<div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:10px;padding:16px;overflow-x:auto">
+    <div style="display:flex;gap:16px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <div style="font-size:13px;font-weight:500;color:var(--text)">Evolução ${new Date(filled[0].date+'T12:00:00').toLocaleDateString('pt-BR')} → ${new Date(filled[filled.length-1].date+'T12:00:00').toLocaleDateString('pt-BR')}</div>
+      <div style="display:flex;gap:12px;margin-left:auto;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:5px;font-size:11px"><div style="width:20px;height:2px;background:var(--green)"></div>Online</div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:11px"><div style="width:20px;height:2px;background:var(--red)"></div>Offline</div>
+        ${projection&&projection.length?`<div style="display:flex;align-items:center;gap:5px;font-size:11px"><div style="width:20px;height:2px;background:var(--purple);border-top:2px dashed var(--purple)"></div>Projeção Online</div>`:''}
+      </div>
+    </div>
+    <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="overflow:visible;max-width:100%">
+      <!-- Grid lines -->
+      ${yTicks.map(v=>`<line x1="${PAD.left}" y1="${yOf(v)}" x2="${W-PAD.right}" y2="${yOf(v)}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>`).join('')}
+      <!-- Y labels -->
+      ${yTicks.map(v=>`<text x="${PAD.left-6}" y="${yOf(v)+4}" text-anchor="end" font-size="10" fill="#445577" font-family="Roboto,sans-serif">${v}</text>`).join('')}
+      <!-- X labels -->
+      ${xLabels.map(l=>`<text x="${l.x}" y="${H-6}" text-anchor="middle" font-size="10" fill="#445577" font-family="Roboto,sans-serif">${l.label}</text>`).join('')}
+      <!-- Filled area online -->
+      <path d="${onlinePath}L${xOf(filled[filled.length-1].date)},${yOf(0)}L${xOf(filled[0].date)},${yOf(0)}Z" fill="rgba(0,230,118,0.08)"/>
+      <!-- Filled area offline -->
+      
+      <!-- Online line -->
+      <path d="${onlinePath}" fill="none" stroke="#00e676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <!-- Offline line -->
+      
+      <!-- Projection lines -->
+      ${projPath?`<path d="${projPath}" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="5,3" stroke-linecap="round"/>`:''}
+      <!-- Data points (last 30 days) -->
+      ${filled.slice(-30).map(d=>`<circle cx="${xOf(d.date)}" cy="${yOf(d.online)}" r="3" fill="#00e676" stroke="var(--bg3)" stroke-width="1.5"/>`).join('')}
+      <!-- Today line -->
+      ${filled.find(d=>d.date===new Date().toISOString().split('T')[0])?`<line x1="${xOf(new Date().toISOString().split('T')[0])}" y1="${PAD.top}" x2="${xOf(new Date().toISOString().split('T')[0])}" y2="${H-PAD.bottom}" stroke="rgba(202,157,74,0.4)" stroke-width="1" stroke-dasharray="3,3"/><text x="${xOf(new Date().toISOString().split('T')[0])}" y="${PAD.top-4}" text-anchor="middle" font-size="9" fill="var(--accent)" font-family="Roboto,sans-serif">HOJE</text>`:''}
+      <!-- Meta line: 209 cameras -->
+      <line x1="${PAD.left}" y1="${yOf(209)}" x2="${W-PAD.right}" y2="${yOf(209)}" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6,3"/>
+      <text x="${W-PAD.right+4}" y="${yOf(209)+4}" font-size="11" fill="#fbbf24" font-family="Roboto,sans-serif" font-weight="600">META 209</text>
+      <rect x="${PAD.left}" y="${yOf(209)-11}" width="50" height="14" rx="3" fill="rgba(251,191,36,0.12)"/>
+      <text x="${PAD.left+4}" y="${yOf(209)+1}" font-size="10" fill="#fbbf24" font-family="Roboto,sans-serif" font-weight="600">209</text>
+      <!-- Axes -->
+      <line x1="${PAD.left}" y1="${PAD.top}" x2="${PAD.left}" y2="${H-PAD.bottom}" stroke="#1e2a3a" stroke-width="1"/>
+      <line x1="${PAD.left}" y1="${H-PAD.bottom}" x2="${W-PAD.right}" y2="${H-PAD.bottom}" stroke="#1e2a3a" stroke-width="1"/>
+    </svg>
+  </div>`;
+}
+
+function updateChartDay(date, value){
+  const v = value===''||value===null ? null : Math.max(0,Math.min(getTotal(),parseInt(value)||0));
+  chartData = chartData.map(d=>d.date===date?{...d,online:v}:d);
+  saveChartData();
+  // Refresh only the chart content without full render
+  const content = document.querySelector('.content');
+  if(content && page==='grafico'){
+    content.innerHTML = renderGrafico();
+  }
+}
+
+
+function renderDashboardChart(){
+  const filled     = chartData.filter(d=>d.online!==null);
+  const projection = getChartProjection();
+  const total      = getTotal();
+  if(filled.length===0) return '';
+
+  const recent  = filled.slice(-60);
+  const today   = new Date().toISOString().split('T')[0];
+  const last    = recent[recent.length-1];
+  const avgOnline = Math.round(filled.reduce((s,d)=>s+d.online,0)/filled.length);
+  const trend   = filled.length>=2 ? filled[filled.length-1].online - filled[filled.length-2].online : 0;
+
+  const W=1060,H=220,PAD={top:20,right:20,bottom:40,left:50};
+  const cW=W-PAD.left-PAD.right, cH=H-PAD.top-PAD.bottom;
+
+  const allPts = [...recent,...(projection||[])];
+  const minDate= new Date(allPts[0].date+'T12:00:00');
+  const maxDate= new Date(allPts[allPts.length-1].date+'T12:00:00');
+  const dRange = (maxDate-minDate)||1;
+
+  const xOf = d => PAD.left+((new Date(d+'T12:00:00')-minDate)/dRange)*cW;
+  const yOf = v => PAD.top+cH-(v/total)*cH;
+
+  let onlinePath='', offlinePath='', projPath='';
+  recent.forEach((d,i)=>{
+    const x=xOf(d.date);
+    onlinePath  += (i===0?`M${x},${yOf(d.online)}`:`L${x},${yOf(d.online)}`);
+    offlinePath += (i===0?`M${x},${yOf(total-d.online)}`:`L${x},${yOf(total-d.online)}`);
+  });
+  if(projection&&projection.length){
+    projPath=`M${xOf(recent[recent.length-1].date)},${yOf(recent[recent.length-1].online)}`;
+    projection.forEach(d=>{ projPath+=`L${xOf(d.date)},${yOf(d.online)}`; });
+  }
+
+  // X axis date labels — show first day of each week
+  const xLabels=[];
+  recent.forEach((d,i)=>{
+    const dt=new Date(d.date+'T12:00:00');
+    if(i===0||dt.getDay()===1||i===recent.length-1){
+      const dd=String(dt.getDate()).padStart(2,'0');
+      const mm=String(dt.getMonth()+1).padStart(2,'0');
+      xLabels.push({x:xOf(d.date), label:`${dd}/${mm}`});
+    }
+  });
+
+  // Interactive points data as JSON for mouseover
+  const pointsData = recent.map(d=>({
+    date:d.date, online:d.online, offline:total-d.online,
+    pct:Math.round(d.online/total*100),
+    x:Math.round(xOf(d.date)), y:Math.round(yOf(d.online)),
+    yo:Math.round(yOf(total-d.online))
+  }));
+  const chartId = 'chart_'+Date.now();
+
+  return `<div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+      <div class="card-title">📈 Evolução de Câmeras</div>
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--text-muted)">Último: <strong style="color:var(--green)">${last.online} online</strong> · <strong style="color:var(--red)">${total-last.online} offline</strong></span>
+        <span style="font-size:12px;color:var(--text-muted)">Média: <strong style="color:var(--accent)">${avgOnline}</strong></span>
+        <span style="font-size:12px;color:${trend>=0?'var(--green)':'var(--red)'}">${trend>=0?'▲':'▼'} ${Math.abs(trend)} vs ontem</span>
+        <a onclick="goPage('grafico')" style="font-size:11px;color:var(--accent);cursor:pointer;text-decoration:underline">Ver detalhes →</a>
+      </div>
+    </div>
+    <div style="padding:12px 16px 4px;overflow-x:auto">
+      <div style="display:flex;gap:14px;margin-bottom:8px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)"><div style="width:16px;height:2px;background:var(--green)"></div>Online</div>
+        ${projection&&projection.length?'<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)"><div style="width:16px;height:2px;border-top:2px dashed var(--purple)"></div>Projeção</div>':''}
+        <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#fbbf24"><div style="width:16px;height:0;border-top:1.5px dashed #fbbf24"></div>Meta (209)</div>
+        <div id="${chartId}_tooltip" style="display:none;background:var(--bg2);border:1px solid rgba(202,157,74,.3);border-radius:8px;padding:8px 12px;font-size:12px;margin-left:auto;min-width:200px"></div>
+      </div>
+      <svg id="${chartId}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="max-width:100%;overflow:visible;cursor:crosshair"
+        onmouseleave="document.getElementById('${chartId}_tooltip').style.display='none';document.getElementById('${chartId}_cursor').style.display='none'">
+        <!-- Grid -->
+        ${[0,0.25,0.5,0.75,1].map(p=>{
+          const v=Math.round(total*p);
+          return `<line x1="${PAD.left}" y1="${yOf(v)}" x2="${W-PAD.right}" y2="${yOf(v)}" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+          <text x="${PAD.left-4}" y="${yOf(v)+4}" text-anchor="end" font-size="10" fill="#445577" font-family="Roboto,sans-serif">${v}</text>`;
+        }).join('')}
+        <!-- X labels -->
+        ${xLabels.map(l=>`<text x="${l.x}" y="${H-6}" text-anchor="middle" font-size="10" fill="#445577" font-family="Roboto,sans-serif">${l.label}</text>`).join('')}
+        <!-- Areas -->
+        <path d="${onlinePath}L${xOf(recent[recent.length-1].date)},${yOf(0)}L${xOf(recent[0].date)},${yOf(0)}Z" fill="rgba(0,230,118,0.07)"/>
+        
+        <!-- Lines -->
+        <path d="${onlinePath}"  fill="none" stroke="#00e676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        
+        ${projPath?`<path d="${projPath}" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="5,3" stroke-linecap="round"/>`:''}
+        <!-- Cursor line (hidden by default) -->
+        <line id="${chartId}_cursor" x1="0" y1="${PAD.top}" x2="0" y2="${H-PAD.bottom}" stroke="rgba(202,157,74,0.4)" stroke-width="1" stroke-dasharray="3,3" display="none"/>
+        <!-- Today marker -->
+        ${recent.find(d=>d.date===today)?`<line x1="${xOf(today)}" y1="${PAD.top}" x2="${xOf(today)}" y2="${H-PAD.bottom}" stroke="rgba(202,157,74,0.35)" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="${xOf(today)}" y="${PAD.top-4}" text-anchor="middle" font-size="9" fill="var(--accent)" font-family="Roboto,sans-serif">HOJE</text>`:''}
+        <!-- Interactive overlay rectangles per data point -->
+        ${pointsData.map((p,i)=>{
+          const nextX = i<pointsData.length-1 ? pointsData[i+1].x : W-PAD.right;
+          const prevX = i>0 ? pointsData[i-1].x : PAD.left;
+          const rx = Math.round((p.x+prevX)/2);
+          const rw = Math.round((nextX-prevX)/2);
+          const dt = new Date(p.date+'T12:00:00');
+          const fmtD = `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()}`;
+          const dayNames=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+          const dayN = dayNames[dt.getDay()];
+          return `<rect x="${rx}" y="${PAD.top}" width="${rw}" height="${cH}" fill="transparent" 
+            onmouseover="chartHover('${chartId}',${p.x},${p.y},${p.yo},${p.online},${p.offline},${p.pct},'${fmtD}','${dayN}')"
+          />`;
+        }).join('')}
+        <!-- Dot indicators -->
+        ${pointsData.filter((_,i)=>i%Math.max(1,Math.floor(pointsData.length/20))===0||i===pointsData.length-1).map(p=>`
+          <circle cx="${p.x}" cy="${p.y}"  r="2.5" fill="#00e676" opacity="0.7"/>`).join('')}
+        <!-- Meta 209 -->
+        <line x1="${PAD.left}" y1="${yOf(209)}" x2="${W-PAD.right}" y2="${yOf(209)}" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6,3"/>
+        <rect x="${PAD.left}" y="${yOf(209)-11}" width="42" height="14" rx="3" fill="rgba(251,191,36,0.15)"/>
+        <text x="${PAD.left+4}" y="${yOf(209)+1}" font-size="9" fill="#fbbf24" font-family="Roboto,sans-serif" font-weight="700">209</text>
+        <text x="${W-PAD.right-4}" y="${yOf(209)-4}" text-anchor="end" font-size="9" fill="#fbbf24" font-family="Roboto,sans-serif" font-weight="600">META</text>
+        <!-- Axes -->
+        <line x1="${PAD.left}" y1="${H-PAD.bottom}" x2="${W-PAD.right}" y2="${H-PAD.bottom}" stroke="#1e2a3a" stroke-width="1"/>
+        <line x1="${PAD.left}" y1="${PAD.top}" x2="${PAD.left}" y2="${H-PAD.bottom}" stroke="#1e2a3a" stroke-width="1"/>
+      </svg>
+    </div>
+  </div>`;
+}
+
+function chartHover(chartId, x, y, yo, online, offline, pct, date, dayName){
+  const cursor = document.getElementById(chartId+'_cursor');
+  const tooltip = document.getElementById(chartId+'_tooltip');
+  if(cursor){ cursor.setAttribute('x1',x); cursor.setAttribute('x2',x); cursor.style.display=''; cursor.removeAttribute('display'); }
+  if(tooltip){
+    const color = pct>=80?'var(--green)':pct>=60?'var(--yellow)':'var(--red)';
+    tooltip.style.display='block';
+    tooltip.innerHTML=`
+      <div style="font-weight:600;color:var(--text);margin-bottom:6px">${dayName}, ${date}</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div><span style="color:var(--green);font-size:15px;font-weight:600">${online}</span><span style="color:var(--text-muted);font-size:11px"> online</span></div>
+        <div><span style="color:var(--red);font-size:15px;font-weight:600">${offline}</span><span style="color:var(--text-muted);font-size:11px"> offline</span></div>
+        <div><span style="color:${color};font-size:15px;font-weight:600">${pct}%</span><span style="color:var(--text-muted);font-size:11px"> disp.</span></div>
+      </div>
+    `;
+  }
+}
+
+
+
+// ── DELETE TICKET ─────────────────────────────────────────────────────────────
+function confirmDeleteTicket(id){ deleteTicketId=id; render(); }
+function cancelDeleteTicket(){ deleteTicketId=null; render(); }
+
+function renderDeleteTicketConfirm(){
+  const t = tickets.find(x=>x.id===deleteTicketId); if(!t) return '';
+  return `<div class="modal-overlay" onclick="if(event.target===this)cancelDeleteTicket()">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-head">
+      <div class="modal-title" style="color:var(--red)">Excluir Chamado</div>
+      <button class="icon-btn" onclick="cancelDeleteTicket()">${IC.x}</button>
+    </div>
+    <div class="modal-body" style="text-align:center;padding:28px 24px">
+      <div style="width:52px;height:52px;border-radius:50%;background:rgba(255,61,87,.1);border:2px solid rgba(255,61,87,.3);display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+      </div>
+      <div style="font-size:11px;color:var(--accent);font-family:monospace;margin-bottom:6px">${t.id}</div>
+      <div style="font-size:15px;font-weight:500;color:var(--text);margin-bottom:8px">${t.title}</div>
+      <div style="font-size:13px;color:var(--text-muted);line-height:1.6">Esta ação não pode ser desfeita.<br/>Todo o histórico do chamado será perdido.</div>
+    </div>
+    <div class="modal-foot" style="justify-content:space-between">
+      <button class="btn btn-ghost" onclick="cancelDeleteTicket()">Cancelar</button>
+      <button class="btn btn-danger" onclick="executeDeleteTicket('${t.id}')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        Confirmar Exclusão
+      </button>
+    </div>
+  </div></div>`;
+}
+
+async function executeDeleteTicket(id){
+  try {
+    await sbDelete('tickets','id=eq.'+id);
+    showToast('✓ Chamado excluído');
+  } catch(e){
+    showToast('⚠ Removido localmente');
+  }
+  tickets = tickets.filter(t=>t.id!==id);
+  deleteTicketId = null;
+  render();
+}
+
+
+// ── EDIT STATS MANUALLY ───────────────────────────────────────────────────────
+function renderEditStatsModal(){
+  const kmzTotal   = CAMERAS.length;
+  const kmzOnline  = CAMERAS.filter(c=>c.status==='online').length;
+  const kmzOffline = CAMERAS.filter(c=>c.status==='offline').length;
+  const curTotal   = getTotal();
+  const curOnline  = getOnline();
+
+  return `<div class="modal-overlay" onclick="if(event.target===this){showEditStats=false;render()}">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-head">
+      <div class="modal-title">⚙ Editar Valores do Dashboard</div>
+      <button class="icon-btn" onclick="showEditStats=false;render()">${IC.x}</button>
+    </div>
+    <div class="modal-body">
+      <!-- KMZ reference -->
+      <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:8px;padding:12px 14px;margin-bottom:16px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Valores do último KMZ importado</div>
+        <div style="display:flex;gap:20px">
+          <div><span style="font-size:20px;font-weight:300;color:var(--text)">${kmzTotal}</span><span style="font-size:11px;color:var(--text-muted);margin-left:4px">Total</span></div>
+          <div><span style="font-size:20px;font-weight:300;color:var(--green)">${kmzOnline}</span><span style="font-size:11px;color:var(--text-muted);margin-left:4px">Online</span></div>
+          <div><span style="font-size:20px;font-weight:300;color:var(--red)">${kmzOffline}</span><span style="font-size:11px;color:var(--text-muted);margin-left:4px">Offline</span></div>
+        </div>
+      </div>
+
+      <!-- Manual inputs -->
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;line-height:1.6">
+        Edite os valores abaixo para exibir números diferentes no dashboard.<br/>
+        <span style="color:var(--yellow)">⚠ O mapa continuará usando os dados reais do KMZ.</span>
+      </div>
+
+      <div class="form-grid">
+        <div class="f-group fg-full">
+          <label class="f-label">Total de Câmeras</label>
+          <input class="f-input" id="es-total" type="number" min="1" max="9999"
+            value="${curTotal}" placeholder="${kmzTotal}"/>
+        </div>
+        <div class="f-group">
+          <label class="f-label" style="color:var(--green)">Online</label>
+          <input class="f-input" id="es-online" type="number" min="0"
+            value="${curOnline}" placeholder="${kmzOnline}"
+            oninput="document.getElementById('es-offline-preview').textContent=Math.max(0,(parseInt(document.getElementById('es-total').value)||${curTotal})-(parseInt(this.value)||0))"
+            style="border-color:rgba(0,230,118,.3)"/>
+        </div>
+        <div class="f-group">
+          <label class="f-label" style="color:var(--red)">Offline (calculado)</label>
+          <div style="background:var(--bg4);border:1px solid rgba(255,61,87,.3);color:var(--red);padding:9px 11px;border-radius:6px;font-size:13px;font-weight:500">
+            <span id="es-offline-preview">${curTotal-curOnline}</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="es-error" style="display:none;margin-top:10px;padding:8px 12px;background:rgba(255,61,87,.1);border:1px solid rgba(255,61,87,.3);border-radius:6px;font-size:13px;color:var(--red)"></div>
+    </div>
+    <div class="modal-foot" style="justify-content:space-between">
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" onclick="showEditStats=false;render()">Cancelar</button>
+        ${manualStats?`<button class="btn btn-danger btn-sm" onclick="restoreKmzStats()">↩ Restaurar KMZ</button>`:''}
+      </div>
+      <button class="btn btn-primary" onclick="saveManualStatsForm()">✓ Salvar Valores</button>
+    </div>
+  </div></div>`;
+}
+
+async function saveManualStatsForm(){
+  const total  = parseInt(document.getElementById('es-total').value);
+  const online = parseInt(document.getElementById('es-online').value);
+  const errEl  = document.getElementById('es-error');
+  errEl.style.display='none';
+
+  if(isNaN(total)||total<1)  return (errEl.textContent='Total inválido.', errEl.style.display='block');
+  if(isNaN(online)||online<0) return (errEl.textContent='Online inválido.', errEl.style.display='block');
+  if(online>total) return (errEl.textContent='Online não pode ser maior que o total.', errEl.style.display='block');
+
+  manualStats = {total, online};
+  showEditStats = false;
+  showToast('💾 Salvando...');
+  render();
+  await saveManualStats();
+  showToast('✓ Valores atualizados para todos os usuários!');
 }
 
 // ── BOOT ─────────────────────────────────────────────────────────────────────
