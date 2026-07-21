@@ -1524,12 +1524,35 @@ function parseKml(kmlText){
   });
   console.log('=================');
 
-  return cameras;
+  // Deduplicate names (same point number can appear multiple times in KMZ)
+  const seenNames = {};
+  const deduped = cameras.map(c => {
+    let name = c.name;
+    if(seenNames[name]){
+      seenNames[name]++;
+      name = name + '-' + seenNames[name];
+    } else {
+      seenNames[name] = 1;
+    }
+    return {...c, name};
+  });
+
+  console.log('Duplicate names fixed:', cameras.length - deduped.length);
+  return deduped;
 }
 async function applyImport(){
   if(!importState.cameras||!importState.cameras.length) return;
+
+  // Deduplicate names within this import batch
+  const _seen = {};
+  const _cams = importState.cameras.map(c=>{
+    let nm = c.name;
+    if(_seen[nm]){ _seen[nm]++; nm = nm+'-'+_seen[nm]; } else { _seen[nm]=1; }
+    return {...c, name:nm};
+  });
+
   CAMERAS.length=0;
-  importState.cameras.forEach(c=>CAMERAS.push(c));
+  _cams.forEach(c=>CAMERAS.push(c));
   // Sync to Supabase
   try {
     setLoading(true);
