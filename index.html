@@ -989,10 +989,17 @@ function initMap(){
   const mapDiv = document.getElementById('leaflet-map');
   if(!mapDiv) return;
 
-  // If map already exists just refresh markers
+  // If map already exists, re-attach it to the new div and refresh
   if(leafletMap){
-    leafletMap.invalidateSize({animate:false});
-    renderMapMarkers();
+    // The div was recreated by render() - move map container into it
+    const mapContainer = leafletMap.getContainer();
+    if(mapContainer && mapContainer.parentNode !== mapDiv){
+      mapDiv.appendChild(mapContainer);
+    }
+    setTimeout(()=>{
+      leafletMap.invalidateSize({animate:false});
+      renderMapMarkers();
+    }, 50);
     return;
   }
 
@@ -1028,7 +1035,16 @@ function initMap(){
 
 
 function fixMap(){
-  [100, 300, 600].forEach(d => setTimeout( d));
+  [100, 300, 600].forEach(d => setTimeout(()=>{
+    if(!leafletMap) return;
+    // Re-attach map container if it got detached from DOM
+    const mapDiv = document.getElementById('leaflet-map');
+    const mc = leafletMap.getContainer();
+    if(mapDiv && mc && mc.parentNode !== mapDiv){
+      mapDiv.appendChild(mc);
+    }
+    if(mapDiv) leafletMap.invalidateSize({animate:false});
+  }, d));
 }
 
 
@@ -1616,7 +1632,16 @@ async function applyImport(){
 }
 
 // ── ACTIONS ───────────────────────────────────────────────────────────────────
-function goPage(p){if(p!=='dashboard'&&p!=='cameras'){if(leafletMap){leafletMap.remove();leafletMap=null;markersLayer=null;}}page=p;camFilter='all';camSearch='';render();}
+function goPage(p){
+  if(p!=='dashboard'&&p!=='cameras'){
+    // Hide map (don't destroy - just detach from DOM)
+    if(leafletMap){
+      const mc = leafletMap.getContainer();
+      if(mc && mc.parentNode) mc.parentNode.removeChild(mc);
+    }
+  }
+  page=p; camFilter='all'; camSearch=''; render();
+}
 function setView(v){viewAs=v;render();}
 function viewTicket(id){openTicketId=id;showModal(renderTicketModal());}
 function closeTicket(){openTicketId=null;hideModal();}
