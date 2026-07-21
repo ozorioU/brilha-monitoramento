@@ -1492,16 +1492,19 @@ function parseKml(kmlText){
     const addr = nameParts.length > 1 ? nameParts.slice(1).join(' - ') : name;
 
     // Generate stable numeric ID from camera name so it's consistent between imports
+    const _rawName = ('CAM-'+String(pnum).padStart(3,'0')).substring(0, 80);
     const stableId = (() => {
       let h = 0;
-      const str = ('CAM-'+String(pnum).padStart(3,'0'));
-      for(let ci=0; ci<str.length; ci++) h = ((h<<5)-h)+str.charCodeAt(ci), h|=0;
-      return Math.abs(h) % 900000 + 100000; // 6-digit stable number
+      for(let ci=0; ci<_rawName.length; ci++) h = ((h<<5)-h)+_rawName.charCodeAt(ci), h|=0;
+      return Math.abs(h) % 900000 + 100000;
     })();
+
+    // Truncate name to avoid DB constraint violations
+    const camName = ('CAM-'+String(pnum).padStart(3,'0')).substring(0, 80);
 
     cameras.push({
       id: stableId,
-      name: 'CAM-'+String(pnum).padStart(3,'0'),
+      name: camName,
       address: addr, lat, lng, status,
       ip: '192.168.'+(Math.floor(i/254)+1)+'.'+(i%254+1),
       model: 'Intelbras/Hikvision',
