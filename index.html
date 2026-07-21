@@ -1476,8 +1476,16 @@ function parseKml(kmlText){
     const pnum = nameParts[0].replace('Ponto','').trim();
     const addr = nameParts.length > 1 ? nameParts.slice(1).join(' - ') : name;
 
+    // Generate stable numeric ID from camera name so it's consistent between imports
+    const stableId = (() => {
+      let h = 0;
+      const str = ('CAM-'+String(pnum).padStart(3,'0'));
+      for(let ci=0; ci<str.length; ci++) h = ((h<<5)-h)+str.charCodeAt(ci), h|=0;
+      return Math.abs(h) % 900000 + 100000; // 6-digit stable number
+    })();
+
     cameras.push({
-      id: i+1,
+      id: stableId,
       name: 'CAM-'+String(pnum).padStart(3,'0'),
       address: addr, lat, lng, status,
       ip: '192.168.'+(Math.floor(i/254)+1)+'.'+(i%254+1),
@@ -1529,17 +1537,20 @@ async function applyImport(){
     const chunks=[];
     for(let i=0;i<CAMERAS.length;i+=50) chunks.push(CAMERAS.slice(i,i+50));
     for(const chunk of chunks){
+      const camData = chunk.map(c=>({
+        id:c.id, name:c.name, address:c.address,
+        lat:c.lat, lng:c.lng, status:c.status,
+        ip:c.ip, model:c.model, location:c.location
+      }));
+      // Use upsert (POST with merge-duplicates) - this DOES update on conflict in Supabase
       const resp = await fetch(`${SB_URL}/rest/v1/cameras`, {
         method:'POST',
         headers:{
           ...SB_HEADERS,
-          'Prefer':'return=minimal,resolution=merge-duplicates'
+          'Prefer':'return=minimal,resolution=merge-duplicates',
+          'Content-Type':'application/json'
         },
-        body: JSON.stringify(chunk.map(c=>({
-          id:c.id, name:c.name, address:c.address,
-          lat:c.lat, lng:c.lng, status:c.status,
-          ip:c.ip, model:c.model, location:c.location
-        })))
+        body: JSON.stringify(camData)
       });
       if(!resp.ok){ const t=await resp.text(); throw new Error('Upsert: HTTP '+resp.status+' '+t.substring(0,100)); }
     }
