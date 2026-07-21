@@ -1416,14 +1416,15 @@ function parseKml(kmlText){
       // CONFIRMED by pixel analysis of this KMZ:
       // ci-1 / icon-1 = GREEN = online
       // ci-2 / icon-2 = RED = offline
-      if(/ci-2|icon-2/.test(id) || /offline|vermelho|deslig/i.test(id)) status = 'offline';
-      else if(/ci-1|icon-1/.test(id) || /online|verde/i.test(id)) status = 'online';
+      // ci-1 = online (green), ci-2 = offline (red) — confirmed for this KMZ
+      if(id.includes('ci-2') || id.includes('icon-2') || /offline|vermelho|deslig/i.test(id)) status = 'offline';
+      else if(id.includes('ci-1') || id.includes('icon-1') || /online|verde/i.test(id)) status = 'online';
     }
 
     // Check by icon href URL content
     if(!status){
-      if(/icon-2\./.test(href)) status = 'offline';
-      else if(/icon-1\./.test(href)) status = 'online';
+      if(href.includes('icon-2')) status = 'offline';
+      else if(href.includes('icon-1')) status = 'online';
       else if(/icon-3\./i.test(href)) status = 'manutencao';
     }
 
