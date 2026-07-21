@@ -138,11 +138,13 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Roboto
 .cam-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
 .cam-card.online::before{background:var(--green);}
 .cam-card.offline::before{background:var(--red);}
+.cam-card.manutencao::before{background:var(--yellow);}
 .cc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;}
 .cc-name{font-weight:500;font-size:13px;}
 .cc-status{font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;text-transform:uppercase;}
 .cc-online{background:rgba(0,230,118,.12);color:var(--green);}
 .cc-offline{background:rgba(255,61,87,.12);color:var(--red);}
+.cc-manutencao{background:rgba(255,196,0,.12);color:var(--yellow);}
 .cc-addr{font-size:12px;color:var(--text-dim);margin-bottom:5px;}
 .cc-meta{font-size:11px;color:var(--text-muted);display:flex;justify-content:space-between;}
 .cc-ip{font-family:monospace;color:var(--accent);font-size:11px;}
@@ -557,7 +559,7 @@ const openTks   = () => tickets.filter(t=>t.status!=='Finalizado');
 const myTks     = () => currentUser.role==='tech' ? tickets.filter(t=>t.tech_id===currentUser.id) : tickets;
 const techs     = () => USERS.filter(u=>u.role==='tech');
 const getOnline  = () => manualStats!==null ? manualStats.online : CAMERAS.filter(c=>c.status==='online').length;
-const getOffline = () => manualStats!==null ? manualStats.total-manualStats.online : CAMERAS.filter(c=>c.status==='offline').length;
+const getOffline = () => manualStats!==null ? manualStats.total-manualStats.online : CAMERAS.filter(c=>c.status==='offline'||c.status==='manutencao').length;
 const getTotal   = () => manualStats!==null ? manualStats.total : CAMERAS.length;
 const makeAvatar = n => n.split(' ').filter((_,i,a)=>i===0||i===a.length-1).map(w=>w[0]||'').join('').toUpperCase().slice(0,2)||'??';
 const roleLabel  = r => r==='admin'?'Administrador':r==='tech'?'Técnico':'Cliente';
@@ -823,7 +825,7 @@ function renderDashboard(){
   <div class="stats-grid">
     <div class="stat-card sc-blue"><div class="sc-icon ic-blue">${IC.cam}</div><div class="sc-val">${tot}</div><div class="sc-lbl">Total</div><div class="sc-sub">câmeras</div></div>
     <div class="stat-card sc-green"><div class="sc-icon ic-green">${IC.check}</div><div class="sc-val" style="color:var(--green)">${on}</div><div class="sc-lbl">Online</div><div class="sc-sub" style="color:var(--green)">operacionais</div></div>
-    <div class="stat-card sc-red"><div class="sc-icon ic-red">${IC.alert}</div><div class="sc-val" style="color:var(--red)">${off}</div><div class="sc-lbl">Offline</div><div class="sc-sub" style="color:var(--red)">requerem atenção</div></div>
+    <div class="stat-card sc-red"><div class="sc-icon ic-red">${IC.alert}</div><div class="sc-val" style="color:var(--red)">${off}</div><div class="sc-lbl">Offline</div><div class="sc-sub" style="color:var(--red)">${CAMERAS.filter(c=>c.status==='manutencao').length>0?CAMERAS.filter(c=>c.status==='manutencao').length+' em manutenção':'requerem atenção'}</div></div>
     <div class="stat-card sc-yellow"><div class="sc-icon ic-yellow">${IC.eye}</div><div class="sc-val" style="color:var(--yellow)">${pct}%</div><div class="sc-lbl">Disponibilidade</div><div class="sc-sub">${on}/${tot} câmeras</div></div>
     <div class="stat-card sc-accent"><div class="sc-icon ic-accent">${IC.ticket}</div><div class="sc-val" style="color:var(--accent)">${openTks().length}</div><div class="sc-lbl">Tickets Abertos</div><div class="sc-sub">${tickets.filter(t=>t.status==='Finalizado').length} finalizados</div></div>
   </div>
@@ -844,7 +846,8 @@ function renderDashboard(){
     <div class="map-wrap" id="map-placeholder"><div id="leaflet-map" style="width:100%;height:100%"></div>
       <div class="map-legend">
         <div class="ml-row"><div class="ml-dot" style="background:var(--green);box-shadow:0 0 5px var(--green)"></div>Online (${on})</div>
-        <div class="ml-row"><div class="ml-dot" style="background:var(--red);box-shadow:0 0 5px var(--red)"></div>Offline (${off})</div>
+        <div class="ml-row"><div class="ml-dot" style="background:var(--red);box-shadow:0 0 5px var(--red)"></div>Offline (${CAMERAS.filter(c=>c.status==='offline').length})</div>
+        <div class="ml-row"><div class="ml-dot" style="background:var(--yellow);box-shadow:0 0 5px var(--yellow)"></div>Manutenção (${CAMERAS.filter(c=>c.status==='manutencao').length})</div>
       </div>
     </div>
     <div class="map-info-bar" id="map-info-bar"><span style="font-size:12px;color:var(--text-muted)">Clique em um marcador para ver detalhes</span></div>
@@ -1030,8 +1033,8 @@ function fixMap(){
 
 
 function makeMarkerIcon(status){
-  const color=status==='online'?'#00e676':'#ff3d57';
-  const glow=status==='online'?'rgba(0,230,118,0.7)':'rgba(255,61,87,0.7)';
+  const color=status==='online'?'#00e676':status==='manutencao'?'#ffc400':'#ff3d57';
+  const glow=status==='online'?'rgba(0,230,118,0.7)':status==='manutencao'?'rgba(255,196,0,0.7)':'rgba(255,61,87,0.7)';
   return L.divIcon({className:'',html:`<div style="filter:drop-shadow(0 0 4px ${glow})"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="${color}" opacity="0.2"/><circle cx="10" cy="10" r="5.5" fill="${color}"/><circle cx="10" cy="10" r="2.5" fill="#0a0d16"/></svg></div>`,iconSize:[20,20],iconAnchor:[10,10],popupAnchor:[0,-12]});
 }
 function renderMapMarkers(){
@@ -1040,6 +1043,7 @@ function renderMapMarkers(){
   let list=CAMERAS;
   if(mapFilter==='online') list=list.filter(c=>c.status==='online');
   if(mapFilter==='offline') list=list.filter(c=>c.status==='offline');
+  if(mapFilter==='manutencao') list=list.filter(c=>c.status==='manutencao');
   if(mapSearch){const q=mapSearch.toLowerCase();list=list.filter(c=>c.name.toLowerCase().includes(q)||c.address.toLowerCase().includes(q));}
   const er=effRole();
   list.forEach(cam=>{
@@ -1401,23 +1405,32 @@ function parseKml(kmlText){
 
     let status = null;
 
-    // Check by style id name patterns
-    if(/offline|red|vermelho|ci-1|icon-1|deslig/i.test(id)) status = 'offline';
-    else if(/online|green|verde|ci-2|icon-2|lig/i.test(id)) status = 'online';
+    // Check yellow/maintenance FIRST (before other patterns to avoid false matches)
+    // Yellow: FFEA00, FFD700, FFC400, or icon-3, or 'yellow' keyword in id
+    if(/ffea00|ffd700|ffc400|ffff00|yellow|amarelo|manut|icon-3/i.test(id+href+color)){
+      status = 'manutencao';
+    }
+
+    if(!status){
+      // Check by style id name patterns
+      // Use word-boundary style checks to avoid 'icon-1500' matching 'icon-1'
+      // ci-1 = offline, ci-2 = online (exact match)
+      if(/\bci-1\b|\bicon-1\b/.test(id) || /offline|vermelho|deslig/i.test(id)) status = 'offline';
+      else if(/\bci-2\b|\bicon-2\b/.test(id) || /online|verde|lig(?!ht)/i.test(id)) status = 'online';
+    }
 
     // Check by icon href URL content
     if(!status){
-      if(/red|ff0000|e51c23|f44336|vermelho/i.test(href)) status = 'offline';
-      else if(/green|00e676|4caf50|verde|0f9d58/i.test(href)) status = 'online';
+      if(/\bicon-1\.|red\b|ff0000|e51c23|f44336|vermelho/i.test(href)) status = 'offline';
+      else if(/\bicon-2\.|\bgreen\b|00e676|4caf50|verde|0f9d58/i.test(href)) status = 'online';
+      else if(/icon-3\./i.test(href)) status = 'manutencao';
     }
 
-    // Check by KML color value (AABBGGRR format - red = FF0000FF -> last bytes)
+    // Check by KML color value (AABBGGRR format)
     if(!status && color){
-      // KML color is AABBGGRR
-      // Red: low R bytes (last 2 chars), high B bytes
-      // Green: high G bytes (middle), low R bytes
-      if(color.endsWith('ff') && color.startsWith('ff00')) status = 'offline'; // blue-ish = offline
-      if(/ff00(ff|[89a-f][0-9a-f])00/i.test(color)) status = 'online'; // green
+      if(/ff00(ff|[89a-f][0-9a-f])00/i.test(color)) status = 'online';  // green
+      else if(/ff0000ff/i.test(color)) status = 'offline';               // red
+      else if(/ff00(ea|d7|c4)ff|ffffc400|ffffea00/i.test(color)) status = 'manutencao'; // yellow
     }
 
     if(status) styleColors['#'+id] = status;
@@ -1562,6 +1575,10 @@ async function applyImport(){
     // Strategy: upsert by name (requires UNIQUE constraint on name column)
     // Run this SQL once in Supabase if not done yet:
     // ALTER TABLE cameras ADD CONSTRAINT cameras_name_key UNIQUE (name);
+    // Log sample of what we're sending
+    const sample = CAMERAS.slice(0,3).map(c=>c.name+':'+c.status).join(', ');
+    console.log('Sending to DB (sample):', sample);
+
     for(const chunk of chunks){
       const resp = await fetch(`${SB_URL}/rest/v1/cameras?on_conflict=name`, {
         method: 'POST',
@@ -1577,6 +1594,11 @@ async function applyImport(){
         throw new Error('Upsert: HTTP '+resp.status+' — '+t.substring(0,150));
       }
     }
+    // Verify: reload cameras from DB to confirm status was saved
+    try{
+      const dbCams = await sbGet('cameras','select=name,status&order=id.asc&limit=5');
+      console.log('DB after import (sample):', dbCams.map(c=>c.name+':'+c.status).join(', '));
+    }catch(e){}
     setLoading(false);
     showToast('✓ '+CAMERAS.length+' câmeras sincronizadas com o banco!');
   } catch(e){
