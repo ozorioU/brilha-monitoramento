@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -30,6 +31,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Roboto
 .sb-logo{height:var(--topbar);padding:0 16px;border-bottom:1px solid rgba(202,157,74,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;background:rgba(202,157,74,.03);}
 .sb-nav{flex:1;padding:10px 0;overflow-y:auto;}
 .sb-sec{padding:8px 16px 4px;font-size:10px;color:var(--accent2);text-transform:uppercase;letter-spacing:2px;}
+.sb-sep{height:1px;background:rgba(202,157,74,.1);margin:6px 16px;}
 .nav-item{display:flex;align-items:center;gap:9px;padding:10px 16px;cursor:pointer;transition:all .2s;color:var(--text-dim);border-left:3px solid transparent;font-size:13px;font-weight:400;letter-spacing:.2px;user-select:none;}
 .nav-item:hover{background:rgba(202,157,74,.07);color:var(--text);}
 .nav-item.active{background:rgba(202,157,74,.1);color:var(--accent);border-left-color:var(--accent);}
@@ -534,6 +536,10 @@ let leafletMap = null, markersLayer = null, selectedCam = null;
 let openTicketId = null, showNewTicket = false, showImportModal = false;
 let camHistoryId = null, previewImg = null;
 let showUserModal = false, editUserId = null, deleteUserId = null, showChangePassword = false, deleteTicketId = null;
+let campoSubPage = 'home'; // 'home' | 'troca-onu' | 'troca-onu-form' | 'troca-onu-lista'
+let onuForm = {}; // current ONU form data
+let onuRegistros = []; // all ONU records
+let onuFormStep = 1; // 1=camera, 2=dados, 3=fotos
 let manualStats = null; // {total, online} when manually overridden
 let showEditStats = false;
 let mapFilter = 'all', mapSearch = '', camFilter = 'all', camSearch = '';
@@ -581,6 +587,7 @@ const IC={
   ticket:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5v2M15 11v2M15 17v2M5 5h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V7a2 2 0 0 1 2-2z"/></svg>`,
   users:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
   key:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>`,
+  campo:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
   chart:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>`,
   logout:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
   plus:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
@@ -602,6 +609,7 @@ const IC={
 async function init(){
   loadChartData();
   await loadManualStats();
+  await loadOnuRegistros();
   setLoading(true);
   try {
     // Load users
@@ -672,6 +680,10 @@ function render(){
   bindKeys();
   if(page==='dashboard'||page==='cameras'){
     requestAnimationFrame(initMap);
+  } else if(page==='campo'&&campoSubPage==='troca-onu-form'){
+    requestAnimationFrame(initOnuMiniMap);
+  }
+  if(page==='dashboard'||page==='cameras'){
     window.onresize = ()=>{ if(leafletMap) leafletMap.invalidateSize({animate:false}); };
     // Fix map on content scroll (Leaflet doesn't auto-detect container scroll)
     const contentEl = document.querySelector('.content');
@@ -707,17 +719,24 @@ function renderShell(){
     {id:'dashboard',label:'Dashboard',icon:'dash'},
     {id:'cameras',label:'Câmeras',icon:'cam'},
     {id:'tickets',label:'Chamados',icon:'ticket',badge:er!=='client'?openTks().length:0},
+    ...(er==='admin'||er==='tech'?[{id:'campo',label:'Técnico / Campo',icon:'campo',section:'Campo'}]:[]),
     ...(er==='admin'?[{id:'users',label:'Usuários',icon:'users'},{id:'grafico',label:'Gráfico',icon:'chart'}]:[]),
   ];
-  const titles={dashboard:'Dashboard',cameras:'Câmeras',tickets:'Chamados',users:'Usuários',grafico:'Gráfico'};
+  const titles={dashboard:'Dashboard',cameras:'Câmeras',tickets:'Chamados',users:'Usuários',grafico:'Gráfico',campo:'Técnico / Campo'};
   return `<div class="app">
     <aside class="sidebar">
       <div class="sb-logo"><img src="data:image/png;base64,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" style="height:34px;object-fit:contain"/></div>
       <nav class="sb-nav">
         <div class="sb-sec">Principal</div>
-        ${navItems.map(n=>`<div class="nav-item${page===n.id?' active':''}" onclick="goPage('${n.id}')">
+        ${navItems.filter(n=>!n.section).map(n=>`<div class="nav-item${page===n.id?' active':''}" onclick="goPage('${n.id}')">
           ${IC[n.icon]}${n.label}${n.badge>0?`<span class="nav-badge">${n.badge}</span>`:''}
         </div>`).join('')}
+        ${navItems.some(n=>n.section)?`
+        <div class="sb-sep"></div>
+        <div class="sb-sec">Campo</div>
+        ${navItems.filter(n=>n.section==='Campo').map(n=>`<div class="nav-item${page===n.id?' active':''}" onclick="goPage('${n.id}')">
+          ${IC[n.icon]}${n.label}${n.badge>0?`<span class="nav-badge">${n.badge}</span>`:''}
+        </div>`).join('')}`:''}
       </nav>
       <div class="sb-user">
         <div class="avatar">${currentUser.avatar||makeAvatar(currentUser.name)}</div>
@@ -760,6 +779,7 @@ function renderPage(){
   if(page==='tickets')   return renderTickets();
   if(page==='users')     return renderUsers();
   if(page==='grafico')   return renderGrafico();
+  if(page==='campo')     return renderCampo();
   return '';
 }
 
@@ -1451,10 +1471,35 @@ function parseKml(kmlText){
     });
   });
 
-  console.log('KMZ parsed:', cameras.length, 'cameras,',
-    cameras.filter(c=>c.status==='online').length, 'online,',
-    cameras.filter(c=>c.status==='offline').length, 'offline');
-  console.log('Styles found:', Object.entries(lookup).map(([k,v])=>k+'='+v).join(', '));
+  console.log('=== KMZ DEBUG ===');
+  console.log('Total cameras:', cameras.length);
+  console.log('Online (green):', cameras.filter(c=>c.status==='online').length);
+  console.log('Offline (red):', cameras.filter(c=>c.status==='offline').length);
+  console.log('Style colors detected:', styleColors);
+  console.log('StyleMap resolved:', styleMapResolve);
+  console.log('Full lookup:', lookup);
+  // Log first 5 placemarks with their styleUrl
+  doc.querySelectorAll('Placemark').forEach((pm,i)=>{
+    if(i>=5) return;
+    const styleUrl = pm.querySelector('styleUrl')?.textContent?.trim()||'';
+    const name = pm.querySelector('name')?.textContent?.trim()||'';
+    console.log('Placemark', i, ':', name, '| styleUrl:', styleUrl, '| resolved:', lookup[styleUrl]||'NOT FOUND');
+  });
+  // Log all raw Style elements
+  console.log('--- Raw Styles ---');
+  doc.querySelectorAll('Style').forEach(s=>{
+    const id = s.getAttribute('id')||'';
+    const href = s.querySelector('IconStyle href, href')?.textContent||'';
+    const color = s.querySelector('IconStyle color, color')?.textContent||'';
+    console.log('Style:', id, '| href:', href.substring(0,80), '| color:', color);
+  });
+  console.log('--- Raw StyleMaps ---');
+  doc.querySelectorAll('StyleMap').forEach(sm=>{
+    const id = sm.getAttribute('id')||'';
+    const pairs = [...sm.querySelectorAll('Pair')].map(p=>p.querySelector('key')?.textContent+':'+p.querySelector('styleUrl')?.textContent).join(', ');
+    console.log('StyleMap:', id, '|', pairs);
+  });
+  console.log('=================');
 
   return cameras;
 }
@@ -2354,6 +2399,701 @@ async function saveManualStatsForm(){
   showToast('✓ Valores atualizados para todos os usuários!');
 }
 
+
+// ── TÉCNICO / CAMPO ────────────────────────────────────────────────────────────
+function initOnuMiniMap(){
+  if(!onuMapMode) return;
+  const el = document.getElementById('onu-mini-map');
+  if(!el||el._mapInit) return;
+  el._mapInit = true;
+  const m = L.map('onu-mini-map',{center:[-16.6869,-49.2648],zoom:13});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OSM'}).addTo(m);
+  CAMERAS.forEach(cam=>{
+    const ic=L.divIcon({className:'',html:'<div style="width:12px;height:12px;border-radius:50%;background:'+(cam.status==='online'?'#00e676':'#ff3d57')+';border:2px solid #0a0d16;cursor:pointer"></div>',iconSize:[12,12],iconAnchor:[6,6]});
+    L.marker([cam.lat,cam.lng],{icon:ic}).addTo(m).on('click',()=>selectOnuCam(cam.id));
+  });
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(pos=>{
+      const ic2=L.divIcon({className:'',html:'<div style="width:14px;height:14px;border-radius:50%;background:#a78bfa;border:2px solid #fff;box-shadow:0 0 8px rgba(167,139,250,.6)"></div>',iconSize:[14,14],iconAnchor:[7,7]});
+      L.marker([pos.coords.latitude,pos.coords.longitude],{icon:ic2}).addTo(m).bindPopup('Você está aqui');
+      m.setView([pos.coords.latitude,pos.coords.longitude],15);
+    });
+  }
+}
+
+function renderCampo(){
+  const er = effRole();
+  if(campoSubPage==='troca-onu'||campoSubPage==='troca-onu-form'||campoSubPage==='troca-onu-lista'){
+    return `<div style="max-width:900px">${renderSubNav()}${renderTrocaOnu()}</div>`;
+  }
+  // Default: chamados em campo
+  const myTickets = er==='tech'
+    ? tickets.filter(t => t.techId===currentUser.id || t.tech_id===currentUser.id)
+    : tickets.filter(t => t.status!=='Finalizado');
+
+  const hoje = new Date().toISOString().split('T')[0];
+  const ativos = myTickets.filter(t => t.status!=='Finalizado');
+  const finalizadosHoje = myTickets.filter(t => {
+    if(t.status!=='Finalizado') return false;
+    const last = t.timeline[t.timeline.length-1];
+    return last?.date?.startsWith(hoje);
+  });
+
+  return `<div style="max-width:900px">
+    ${renderSubNav()}
+    <div style="margin-bottom:20px">
+      <div style="font-size:18px;font-weight:500;color:var(--text);margin-bottom:4px">Chamados em Campo</div>
+      <div style="font-size:12px;color:var(--text-muted)">Visão de campo para atendimentos técnicos</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px">
+      <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:10px;padding:16px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Chamados Ativos</div>
+        <div style="font-size:32px;font-weight:300;color:var(--yellow)">${ativos.length}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">aguardando atendimento</div>
+      </div>
+      <div style="background:var(--bg3);border:1px solid rgba(0,230,118,.2);border-radius:10px;padding:16px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Finalizados Hoje</div>
+        <div style="font-size:32px;font-weight:300;color:var(--green)">${finalizadosHoje.length}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">${hoje.split('-').reverse().join('/')}</div>
+      </div>
+      <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:10px;padding:16px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">${er==='tech'?'Meus Chamados':'Total'}</div>
+        <div style="font-size:32px;font-weight:300;color:var(--accent)">${myTickets.length}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">no período</div>
+      </div>
+    </div>
+
+    ${ativos.length===0?`
+    <div style="background:var(--bg3);border:1px solid rgba(0,230,118,.2);border-radius:10px;padding:48px;text-align:center">
+      <div style="font-size:40px;margin-bottom:12px">✅</div>
+      <div style="font-size:15px;font-weight:500;color:var(--text);margin-bottom:6px">Nenhum chamado ativo</div>
+      <div style="font-size:13px;color:var(--text-muted)">Todos os chamados estão finalizados</div>
+    </div>`:`
+    <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:10px;overflow:hidden;margin-bottom:20px">
+      <div style="padding:14px 18px;border-bottom:1px solid rgba(202,157,74,.15);display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:14px;font-weight:500">Chamados em Campo</div>
+        <span class="badge s-andamento">${ativos.length} ativo${ativos.length!==1?'s':''}</span>
+      </div>
+      <div style="padding:14px 18px;display:flex;flex-direction:column;gap:12px">
+        ${ativos.map(t=>{
+          const cam = CAMERAS.find(c=>c.id===t.cameraId);
+          const tech = USERS.find(u=>u.id===(t.techId||t.tech_id));
+          return `<div style="background:var(--bg4);border:1px solid rgba(202,157,74,.1);border-radius:10px;padding:14px;cursor:pointer;transition:all .2s" onclick="viewTicket('${t.id}')" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='rgba(202,157,74,.1)'">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px">
+              <div>
+                <div style="font-size:11px;color:var(--accent);font-family:monospace;font-weight:600;margin-bottom:2px">${t.id}</div>
+                <div style="font-size:14px;font-weight:500">${t.title}</div>
+              </div>
+              <span class="badge ${statusClass(t.status)}">${t.status}</span>
+            </div>
+            ${cam?`
+            <div style="display:flex;align-items:center;gap:8px;padding:10px;background:rgba(202,157,74,.05);border-radius:8px;margin-bottom:10px">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:500;color:var(--text)">${cam.name}</div>
+                <div style="font-size:11px;color:var(--text-muted);overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${cam.address}</div>
+              </div>
+              <button class="btn btn-sm" style="background:var(--gold-grad);color:#0a0d16;font-weight:700;flex-shrink:0" onclick="event.stopPropagation();openGps(${cam.lat},${cam.lng},'${cam.name}')">
+                🧭 GPS
+              </button>
+            </div>`:''}
+            <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--text-muted)">
+              <span>👤 ${t.requester?.name||'—'}</span>
+              <span>📅 ${fmtDate(t.createdAt||t.created_at)}</span>
+              <span class="tk-priority p-${t.priority.toLowerCase()}">${t.priority}</span>
+              ${tech?`<span style="color:var(--accent)">👷 ${tech.name}</span>`:''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`}
+
+    ${finalizadosHoje.length>0?`
+    <div style="background:var(--bg3);border:1px solid rgba(0,230,118,.15);border-radius:10px;overflow:hidden">
+      <div style="padding:14px 18px;border-bottom:1px solid rgba(0,230,118,.1);display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:14px;font-weight:500;color:var(--green)">✅ Finalizados Hoje</div>
+        <span class="badge s-finalizado">${finalizadosHoje.length}</span>
+      </div>
+      <div style="padding:14px 18px;display:flex;flex-direction:column;gap:10px">
+        ${finalizadosHoje.map(t=>{
+          const cam = CAMERAS.find(c=>c.id===t.cameraId);
+          const last = t.timeline[t.timeline.length-1];
+          return `<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:rgba(0,230,118,.04);border:1px solid rgba(0,230,118,.1);border-radius:8px">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:11px;color:var(--accent);font-family:monospace">${t.id}</div>
+              <div style="font-size:13px;font-weight:500;color:var(--text)">${cam?cam.name:t.title}</div>
+              <div style="font-size:11px;color:var(--text-muted)">${cam?cam.address:''}</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:11px;color:var(--green);font-weight:500">Finalizado</div>
+              <div style="font-size:10px;color:var(--text-muted)">${last?fmtDate(last.date):''}</div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`:''}
+  </div>`;
+}
+
+
+
+
+// ── TROCA ONU ─────────────────────────────────────────────────────────────────
+async function loadOnuRegistros(){
+  try{
+    const data = await sbGet('onu_registros','select=*&order=created_at.asc');
+    onuRegistros = data.map(r=>({
+      id: r.id,
+      data: r.data||r.created_at,
+      cameraId: r.camera_id,
+      camera: r.camera,
+      cameraAddr: r.camera_addr,
+      modeloOnu: r.modelo_onu,
+      sn: r.sn,
+      mac: r.mac,
+      ponSn: r.pon_sn,
+      pin: r.pin||'',
+      fotoAntiga: r.foto_antiga||null,
+      fotoNova: r.foto_nova||null,
+      tecnico: r.tecnico,
+      tecnicoId: r.tecnico_id,
+    }));
+  } catch(e){
+    // Fallback to localStorage
+    try{ const s=localStorage.getItem('brilha_onu'); if(s) onuRegistros=JSON.parse(s); }catch(e2){}
+  }
+}
+async function saveOnuRegistro(registro){
+  // Save single record to Supabase
+  try{
+    await sbPost('onu_registros', {
+      id: registro.id,
+      data: registro.data,
+      camera_id: registro.cameraId,
+      camera: registro.camera,
+      camera_addr: registro.cameraAddr,
+      modelo_onu: registro.modeloOnu,
+      sn: registro.sn,
+      mac: registro.mac,
+      pon_sn: registro.ponSn,
+      pin: registro.pin||'',
+      foto_antiga: registro.fotoAntiga||null,
+      foto_nova: registro.fotoNova||null,
+      tecnico: registro.tecnico,
+      tecnico_id: registro.tecnicoId,
+    });
+    return true;
+  } catch(e){
+    console.error('ONU save error:', e.message);
+    // Fallback: save to localStorage
+    try{ localStorage.setItem('brilha_onu', JSON.stringify(onuRegistros)); }catch(e2){}
+    return false;
+  }
+}
+
+function renderTrocaOnu(){
+  if(campoSubPage==='troca-onu-form') return renderOnuForm();
+  if(campoSubPage==='troca-onu-lista') return renderOnuLista();
+  return renderOnuHome();
+}
+
+async function reloadOnuRegistros(){
+  showToast('🔄 Atualizando registros...');
+  await loadOnuRegistros();
+  showToast('✓ Registros atualizados!');
+  render();
+}
+function renderOnuHome(){
+  const total = onuRegistros.length;
+  const hoje  = new Date().toISOString().split('T')[0];
+  const hoje_count = onuRegistros.filter(r=>r.data?.startsWith(hoje)).length;
+  const er = effRole();
+  return `<div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:18px;font-weight:500">Troca ONU</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Registre substituições de equipamento em campo</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        ${er==='admin'?`<button class="btn btn-ghost btn-sm" onclick="exportOnuExcel()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Exportar Excel
+        </button>`:''}
+        <button class="btn btn-ghost btn-sm" onclick="reloadOnuRegistros()" title="Atualizar da nuvem">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="campoSubPage='troca-onu-lista';render()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          Histórico (${total})
+        </button>
+        <button class="btn btn-primary" onclick="startOnuForm()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Nova Troca
+        </button>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px">
+      <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:10px;padding:16px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Total Registros</div>
+        <div style="font-size:32px;font-weight:300;color:var(--accent)">${total}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">ONUs trocadas</div>
+      </div>
+      <div style="background:var(--bg3);border:1px solid rgba(0,230,118,.2);border-radius:10px;padding:16px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Trocas Hoje</div>
+        <div style="font-size:32px;font-weight:300;color:var(--green)">${hoje_count}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">${hoje.split('-').reverse().join('/')}</div>
+      </div>
+      <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:10px;padding:16px;cursor:pointer" onclick="campoSubPage='troca-onu-lista';render()">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Último Registro</div>
+        <div style="font-size:13px;font-weight:500;color:var(--text);margin-top:4px">${total>0?onuRegistros[onuRegistros.length-1].camera:'—'}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:3px">${total>0?onuRegistros[onuRegistros.length-1].data?.split('T')[0].split('-').reverse().join('/'):'Nenhum registro'}</div>
+      </div>
+    </div>
+
+    ${total>0?`
+    <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:10px;overflow:hidden">
+      <div style="padding:14px 18px;border-bottom:1px solid rgba(202,157,74,.12);font-size:14px;font-weight:500">Registros Recentes</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--bg4)">
+          <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Data/Hora</th>
+          <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Câmera</th>
+          <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Modelo ONU</th>
+          <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Técnico</th>
+          <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">MAC</th>
+        </tr></thead>
+        <tbody>
+          ${[...onuRegistros].reverse().slice(0,5).map(r=>`
+          <tr style="border-top:1px solid rgba(202,157,74,.06)" onmouseover="this.style.background='rgba(202,157,74,.03)'" onmouseout="this.style.background=''">
+            <td style="padding:10px 16px;color:var(--text-dim);font-size:12px">${r.data?new Date(r.data).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—'}</td>
+            <td style="padding:10px 16px;font-weight:500">${r.camera||'—'}</td>
+            <td style="padding:10px 16px;color:var(--text-dim)">${r.modeloOnu||'—'}</td>
+            <td style="padding:10px 16px;color:var(--text-dim)">${r.tecnico||'—'}</td>
+            <td style="padding:10px 16px;font-family:monospace;color:var(--accent);font-size:11px">${r.mac||'—'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      ${total>5?`<div style="padding:10px 16px;text-align:center;border-top:1px solid rgba(202,157,74,.08)"><button class="btn btn-ghost btn-sm" onclick="campoSubPage='troca-onu-lista';render()">Ver todos ${total} registros →</button></div>`:''}
+    </div>`:`
+    <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:10px;padding:60px;text-align:center">
+      <div style="font-size:44px;margin-bottom:14px">🔧</div>
+      <div style="font-size:15px;font-weight:500;color:var(--text);margin-bottom:8px">Nenhuma troca registrada</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px">Clique em "Nova Troca" para registrar a primeira substituição de ONU</div>
+      <button class="btn btn-primary" onclick="startOnuForm()">+ Nova Troca ONU</button>
+    </div>`}
+  </div>`;
+}
+
+// ── ONU FORM ──────────────────────────────────────────────────────────────────
+let onuMapMode = false; // show map to pick camera
+let onuNearMe  = false; // auto-pick nearest
+
+function startOnuForm(){
+  onuForm = {
+    cameraId: null, camera: '', cameraAddr: '',
+    modeloOnu: '', sn: '', mac: '', ponSn: '', pin: '',
+    fotoAntiga: null, fotoNova: null,
+    tecnico: currentUser.name, tecnicoId: currentUser.id,
+    data: new Date().toISOString(),
+  };
+  onuFormStep = 1;
+  onuMapMode  = false;
+  onuNearMe   = false;
+  campoSubPage = 'troca-onu-form';
+  render();
+}
+
+function renderOnuForm(){
+  return `<div style="max-width:680px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px">
+      <button class="btn btn-ghost btn-sm" onclick="campoSubPage='troca-onu';render()">← Voltar</button>
+      <div style="font-size:18px;font-weight:500">Nova Troca ONU</div>
+    </div>
+
+    <!-- Steps indicator -->
+    <div style="display:flex;align-items:center;gap:0;margin-bottom:24px">
+      ${[1,2,3].map(s=>`
+      <div style="display:flex;align-items:center;${s<3?'flex:1;':''}">
+        <div style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;
+          ${onuFormStep===s?'background:var(--gold-grad);color:#0a0d16;':onuFormStep>s?'background:var(--green);color:#0a0d16;':'background:var(--bg4);color:var(--text-muted);border:1px solid var(--border);'}">
+          ${onuFormStep>s?'✓':s}
+        </div>
+        <div style="font-size:11px;margin-left:6px;color:${onuFormStep>=s?'var(--text)':'var(--text-muted)'};white-space:nowrap">${['','Câmera','Dados ONU','Fotos'][s]}</div>
+        ${s<3?`<div style="flex:1;height:1px;background:${onuFormStep>s?'var(--green)':'var(--border)'};margin:0 10px"></div>`:''}
+      </div>`).join('')}
+    </div>
+
+    ${onuFormStep===1 ? renderOnuStep1() : ''}
+    ${onuFormStep===2 ? renderOnuStep2() : ''}
+    ${onuFormStep===3 ? renderOnuStep3() : ''}
+  </div>`;
+}
+
+function renderOnuStep1(){
+  return `<div style="background:var(--bg3);border:1px solid rgba(202,157,74,.15);border-radius:10px;padding:20px">
+    <div style="font-size:14px;font-weight:500;margin-bottom:16px;color:var(--accent)">Passo 1 — Selecionar Câmera</div>
+
+    <!-- Search input -->
+    <div class="f-group" style="margin-bottom:14px">
+      <label class="f-label">Buscar câmera por nome ou endereço</label>
+      <div style="position:relative">
+        <input class="f-input" id="onu-cam-search" placeholder="Digite para buscar..." autocomplete="off"
+          value="${onuForm.camera||''}"
+          oninput="onuSearchCam(this.value)"
+          onfocus="document.getElementById('onu-cam-dropdown').style.display='block'"
+        />
+        <div id="onu-cam-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.4)">
+          ${CAMERAS.slice(0,8).map(c=>`<div style="padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(202,157,74,.05);font-size:13px" 
+            onclick="selectOnuCam(${c.id})"
+            onmouseover="this.style.background='rgba(202,157,74,.08)'"
+            onmouseout="this.style.background=''">
+            <div style="font-weight:500">${c.name}</div>
+            <div style="font-size:11px;color:var(--text-muted)">${c.address}</div>
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    <!-- Selected camera preview -->
+    ${onuForm.cameraId?`<div style="background:rgba(202,157,74,.08);border:1px solid rgba(202,157,74,.25);border-radius:8px;padding:12px 14px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+      <div style="flex:1">
+        <div style="font-weight:500;font-size:14px">${onuForm.camera}</div>
+        <div style="font-size:12px;color:var(--text-muted)">${onuForm.cameraAddr}</div>
+      </div>
+      <span style="font-size:11px;color:var(--green);background:rgba(0,230,118,.1);padding:3px 8px;border-radius:6px">✓ Selecionada</span>
+    </div>`:''}
+
+    <!-- Location options -->
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="onuFindNearest()" style="flex:1;justify-content:center">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
+        Câmera mais próxima de mim
+      </button>
+      <button class="btn btn-ghost btn-sm ${onuMapMode?'active':''}" onclick="onuMapMode=!onuMapMode;render()" style="flex:1;justify-content:center">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+        ${onuMapMode?'Fechar Mapa':'Ver no Mapa'}
+      </button>
+    </div>
+
+    <!-- Mini map -->
+    ${onuMapMode?`<div id="onu-mini-map" style="height:300px;border-radius:8px;overflow:hidden;margin-bottom:16px;border:1px solid var(--border)"></div>`:''}
+    <div id="onu-nearest-msg" style="display:none;padding:10px;background:rgba(0,230,118,.08);border:1px solid rgba(0,230,118,.2);border-radius:6px;font-size:12px;color:var(--green);margin-bottom:12px"></div>
+
+    <div style="display:flex;justify-content:flex-end;margin-top:4px">
+      <button class="btn btn-primary" onclick="onuStep1Next()" ${!onuForm.cameraId?'disabled style="opacity:.5;cursor:not-allowed"':''}>
+        Próximo →
+      </button>
+    </div>
+  </div>`;
+}
+
+function renderOnuStep2(){
+  return `<div style="background:var(--bg3);border:1px solid rgba(202,157,74,.15);border-radius:10px;padding:20px">
+    <div style="font-size:14px;font-weight:500;margin-bottom:4px;color:var(--accent)">Passo 2 — Dados da ONU Nova</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Câmera: <strong style="color:var(--text)">${onuForm.camera}</strong></div>
+
+    <div class="form-grid">
+      <div class="f-group fg-full">
+        <label class="f-label">Modelo da ONU Nova <span style="color:var(--red)">*</span></label>
+        <input class="f-input" id="onu-modelo" placeholder="Ex: ZTE F670L, Huawei HG8245..." value="${onuForm.modeloOnu||''}"
+          oninput="onuForm.modeloOnu=this.value"/>
+      </div>
+      <div class="f-group">
+        <label class="f-label">S/N (Número de Série) <span style="color:var(--red)">*</span></label>
+        <input class="f-input" id="onu-sn" placeholder="Serial Number" value="${onuForm.sn||''}"
+          style="font-family:monospace" oninput="onuForm.sn=this.value"/>
+      </div>
+      <div class="f-group">
+        <label class="f-label">MAC <span style="color:var(--red)">*</span></label>
+        <input class="f-input" id="onu-mac" placeholder="XX:XX:XX:XX:XX:XX" value="${onuForm.mac||''}"
+          style="font-family:monospace;text-transform:uppercase"
+          oninput="onuForm.mac=this.value.toUpperCase()"
+          onblur="formatMac(this)"/>
+      </div>
+      <div class="f-group">
+        <label class="f-label">PON S/N <span style="color:var(--red)">*</span></label>
+        <input class="f-input" id="onu-pon-sn" placeholder="PON Serial Number" value="${onuForm.ponSn||''}"
+          style="font-family:monospace" oninput="onuForm.ponSn=this.value"/>
+      </div>
+      <div class="f-group fg-full">
+        <label class="f-label">PIN <span style="color:var(--text-muted);font-weight:400;text-transform:none;letter-spacing:0">(opcional — apenas se o modelo tiver)</span></label>
+        <input class="f-input" id="onu-pin" placeholder="PIN do equipamento" value="${onuForm.pin||''}"
+          oninput="onuForm.pin=this.value"/>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;margin-top:8px">
+      <button class="btn btn-ghost" onclick="onuFormStep=1;render()">← Voltar</button>
+      <button class="btn btn-primary" onclick="onuStep2Next()">Próximo →</button>
+    </div>
+  </div>`;
+}
+
+function renderOnuStep3(){
+  return `<div style="background:var(--bg3);border:1px solid rgba(202,157,74,.15);border-radius:10px;padding:20px">
+    <div style="font-size:14px;font-weight:500;margin-bottom:4px;color:var(--accent)">Passo 3 — Fotos</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Câmera: <strong style="color:var(--text)">${onuForm.camera}</strong> · ONU: <strong style="color:var(--text)">${onuForm.modeloOnu}</strong></div>
+
+    <div class="form-grid">
+      <!-- Foto ONU Antiga -->
+      <div class="f-group">
+        <label class="f-label">📷 Etiqueta ONU Antiga <span style="color:var(--text-muted);font-weight:400;text-transform:none;letter-spacing:0">(opcional)</span></label>
+        <label style="display:block;cursor:pointer">
+          ${onuForm.fotoAntiga
+            ? `<div style="position:relative;border-radius:8px;overflow:hidden;border:1px solid rgba(202,157,74,.3)">
+                <img src="${onuForm.fotoAntiga}" style="width:100%;height:140px;object-fit:cover"/>
+                <div style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.6);border-radius:20px;padding:3px 8px;font-size:11px;color:var(--text)">Toque para trocar</div>
+               </div>`
+            : `<div class="upload-zone" style="height:140px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <div style="font-size:12px">Foto da etiqueta antiga</div>
+                <div style="font-size:11px;color:var(--text-muted)">JPG, PNG</div>
+               </div>`}
+          <input type="file" accept="image/*" capture="environment" style="display:none" onchange="onuFotoLoad(this,'antiga')"/>
+        </label>
+      </div>
+
+      <!-- Foto ONU Nova -->
+      <div class="f-group">
+        <label class="f-label">📷 Etiqueta ONU Nova <span style="color:var(--red)">*</span></label>
+        <label style="display:block;cursor:pointer">
+          ${onuForm.fotoNova
+            ? `<div style="position:relative;border-radius:8px;overflow:hidden;border:2px solid var(--green)">
+                <img src="${onuForm.fotoNova}" style="width:100%;height:140px;object-fit:cover"/>
+                <div style="position:absolute;top:6px;right:6px;background:rgba(0,230,118,.7);border-radius:20px;padding:3px 8px;font-size:11px;color:#0a0d16;font-weight:600">✓ OK</div>
+               </div>`
+            : `<div class="upload-zone" style="height:140px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-color:rgba(255,61,87,.4)">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <div style="font-size:12px">Foto da etiqueta nova</div>
+                <div style="font-size:11px;color:var(--red)">Obrigatório</div>
+               </div>`}
+          <input type="file" accept="image/*" capture="environment" style="display:none" onchange="onuFotoLoad(this,'nova')"/>
+        </label>
+      </div>
+    </div>
+
+    <!-- Resumo -->
+    <div style="background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:14px">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Resumo da Troca</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
+        <div><span style="color:var(--text-muted)">Câmera:</span> <strong>${onuForm.camera}</strong></div>
+        <div><span style="color:var(--text-muted)">Técnico:</span> <strong>${onuForm.tecnico}</strong></div>
+        <div><span style="color:var(--text-muted)">Modelo:</span> <strong>${onuForm.modeloOnu}</strong></div>
+        <div><span style="color:var(--text-muted)">S/N:</span> <strong style="font-family:monospace">${onuForm.sn}</strong></div>
+        <div><span style="color:var(--text-muted)">MAC:</span> <strong style="font-family:monospace">${onuForm.mac}</strong></div>
+        <div><span style="color:var(--text-muted)">PON S/N:</span> <strong style="font-family:monospace">${onuForm.ponSn}</strong></div>
+        ${onuForm.pin?`<div><span style="color:var(--text-muted)">PIN:</span> <strong>${onuForm.pin}</strong></div>`:''}
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;margin-top:16px">
+      <button class="btn btn-ghost" onclick="onuFormStep=2;render()">← Voltar</button>
+      <button class="btn btn-primary" onclick="onuSubmit()" ${!onuForm.fotoNova?'disabled style="opacity:.5;cursor:not-allowed"':''}>
+        ✓ Finalizar Registro
+      </button>
+    </div>
+  </div>`;
+}
+
+// ── ONU LISTA ─────────────────────────────────────────────────────────────────
+function renderOnuLista(){
+  const er = effRole();
+  const lista = [...onuRegistros].reverse();
+  return `<div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="campoSubPage='troca-onu';render()">← Voltar</button>
+      <div style="font-size:18px;font-weight:500;flex:1">Histórico de Trocas ONU</div>
+      ${er==='admin'?`<button class="btn btn-ghost btn-sm" onclick="exportOnuExcel()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Exportar Excel
+      </button>`:''}
+      <button class="btn btn-primary btn-sm" onclick="startOnuForm()">+ Nova Troca</button>
+    </div>
+
+    ${lista.length===0?`<div style="text-align:center;padding:60px;color:var(--text-muted)"><div style="font-size:40px;margin-bottom:12px">📋</div><div>Nenhum registro ainda</div></div>`:`
+    <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:10px;overflow:hidden">
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:800px">
+          <thead><tr style="background:var(--bg4)">
+            ${['Data/Hora','Câmera','Endereço','Modelo ONU','S/N','MAC','PON S/N','PIN','Técnico','Fotos'].map(h=>`<th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;white-space:nowrap;border-bottom:1px solid rgba(202,157,74,.12)">${h}</th>`).join('')}
+          </tr></thead>
+          <tbody>
+            ${lista.map((r,i)=>`<tr style="border-top:1px solid rgba(202,157,74,.05)" onmouseover="this.style.background='rgba(202,157,74,.03)'" onmouseout="this.style.background=''">
+              <td style="padding:10px 14px;color:var(--text-dim);white-space:nowrap">${r.data?new Date(r.data).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'—'}</td>
+              <td style="padding:10px 14px;font-weight:500;white-space:nowrap">${r.camera||'—'}</td>
+              <td style="padding:10px 14px;color:var(--text-dim);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.cameraAddr||''}">${r.cameraAddr||'—'}</td>
+              <td style="padding:10px 14px;white-space:nowrap">${r.modeloOnu||'—'}</td>
+              <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:var(--accent)">${r.sn||'—'}</td>
+              <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:var(--accent)">${r.mac||'—'}</td>
+              <td style="padding:10px 14px;font-family:monospace;font-size:11px">${r.ponSn||'—'}</td>
+              <td style="padding:10px 14px;color:var(--text-dim)">${r.pin||'—'}</td>
+              <td style="padding:10px 14px;white-space:nowrap">${r.tecnico||'—'}</td>
+              <td style="padding:10px 14px">
+                <div style="display:flex;gap:4px">
+                  ${r.fotoAntiga?`<img src="${r.fotoAntiga}" style="width:36px;height:27px;object-fit:cover;border-radius:3px;border:1px solid var(--border);cursor:pointer" onclick="previewImg='${r.fotoAntiga}';render()" title="ONU Antiga"/>`:''}
+                  ${r.fotoNova?`<img src="${r.fotoNova}" style="width:36px;height:27px;object-fit:cover;border-radius:3px;border:1px solid rgba(0,230,118,.4);cursor:pointer" onclick="previewImg='${r.fotoNova}';render()" title="ONU Nova"/>`:'—'}
+                </div>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`}
+  </div>`;
+}
+
+// ── ONU ACTIONS ───────────────────────────────────────────────────────────────
+function onuSearchCam(q){
+  onuForm.camera = q;
+  onuForm.cameraId = null;
+  const dd = document.getElementById('onu-cam-dropdown');
+  if(!dd) return;
+  if(!q){ dd.innerHTML = CAMERAS.slice(0,8).map(camDropItem).join(''); return; }
+  const ql = q.toLowerCase();
+  const results = CAMERAS.filter(c=>c.name.toLowerCase().includes(ql)||c.address.toLowerCase().includes(ql)).slice(0,10);
+  dd.style.display = results.length?'block':'none';
+  dd.innerHTML = results.length
+    ? results.map(camDropItem).join('')
+    : '<div style="padding:10px 14px;color:var(--text-muted);font-size:12px">Nenhuma câmera encontrada</div>';
+}
+function camDropItem(c){
+  return `<div style="padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(202,157,74,.05);font-size:13px"
+    onclick="selectOnuCam(${c.id})"
+    onmouseover="this.style.background='rgba(202,157,74,.08)'"
+    onmouseout="this.style.background=''">
+    <div style="font-weight:500">${c.name}</div>
+    <div style="font-size:11px;color:var(--text-muted)">${c.address}</div>
+  </div>`;
+}
+function selectOnuCam(id){
+  const c = CAMERAS.find(x=>x.id===id);
+  if(!c) return;
+  onuForm.cameraId = c.id;
+  onuForm.camera   = c.name;
+  onuForm.cameraAddr = c.address;
+  const dd = document.getElementById('onu-cam-dropdown');
+  if(dd) dd.style.display='none';
+  const inp = document.getElementById('onu-cam-search');
+  if(inp) inp.value = c.name;
+  onuMapMode = false;
+  render();
+}
+function onuFindNearest(){
+  if(!navigator.geolocation){ alert('GPS não disponível.'); return; }
+  const msg = document.getElementById('onu-nearest-msg');
+  if(msg){ msg.style.display='block'; msg.textContent='📍 Obtendo sua localização...'; }
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const lat=pos.coords.latitude, lng=pos.coords.longitude;
+    let nearest=null, minDist=Infinity;
+    CAMERAS.forEach(c=>{
+      const d=Math.sqrt((c.lat-lat)**2+(c.lng-lng)**2);
+      if(d<minDist){minDist=d;nearest=c;}
+    });
+    if(nearest){
+      selectOnuCam(nearest.id);
+      const dist=(minDist*111).toFixed(2);
+      if(msg){ msg.textContent=`✓ Câmera mais próxima: ${nearest.name} (~${dist} km)`; }
+    }
+  },()=>{ if(msg){msg.textContent='❌ Não foi possível obter localização.';} });
+}
+function onuStep1Next(){
+  if(!onuForm.cameraId){ alert('Selecione uma câmera.'); return; }
+  onuFormStep=2; render();
+}
+function onuStep2Next(){
+  onuForm.modeloOnu = document.getElementById('onu-modelo')?.value?.trim();
+  onuForm.sn        = document.getElementById('onu-sn')?.value?.trim();
+  onuForm.mac       = document.getElementById('onu-mac')?.value?.trim();
+  onuForm.ponSn     = document.getElementById('onu-pon-sn')?.value?.trim();
+  onuForm.pin       = document.getElementById('onu-pin')?.value?.trim();
+  if(!onuForm.modeloOnu) return alert('Informe o modelo da ONU.');
+  if(!onuForm.sn)        return alert('Informe o S/N.');
+  if(!onuForm.mac)       return alert('Informe o MAC.');
+  if(!onuForm.ponSn)     return alert('Informe o PON S/N.');
+  onuFormStep=3; render();
+}
+function formatMac(el){
+  let v=el.value.replace(/[^0-9A-Fa-f]/g,'').toUpperCase();
+  if(v.length>12) v=v.slice(0,12);
+  el.value=v.match(/.{1,2}/g)?.join(':')||v;
+  onuForm.mac=el.value;
+}
+function onuFotoLoad(input, tipo){
+  const file=input.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=e=>{
+    if(tipo==='antiga') onuForm.fotoAntiga=e.target.result;
+    else onuForm.fotoNova=e.target.result;
+    render();
+  };
+  r.readAsDataURL(file);
+}
+async function onuSubmit(){
+  if(!onuForm.fotoNova) return alert('Foto da ONU nova é obrigatória.');
+  const registro={
+    id:'ONU-'+Date.now(),
+    data: new Date().toISOString(),
+    cameraId: onuForm.cameraId,
+    camera:   onuForm.camera,
+    cameraAddr: onuForm.cameraAddr,
+    modeloOnu: onuForm.modeloOnu,
+    sn:       onuForm.sn,
+    mac:      onuForm.mac,
+    ponSn:    onuForm.ponSn,
+    pin:      onuForm.pin||'',
+    fotoAntiga: onuForm.fotoAntiga||null,
+    fotoNova:   onuForm.fotoNova,
+    tecnico:    onuForm.tecnico,
+    tecnicoId:  onuForm.tecnicoId,
+  };
+  onuRegistros.push(registro);
+  showToast('💾 Salvando...');
+  const saved = await saveOnuRegistro(registro);
+  showToast(saved ? '✓ Troca ONU registrada e sincronizada!' : '⚠ Salvo localmente (sem conexão)');
+  campoSubPage='troca-onu';
+  render();
+}
+function exportOnuExcel(){
+  if(!window.XLSX){ alert('Biblioteca Excel não carregada. Tente novamente.'); return; }
+  if(!onuRegistros.length){ alert('Nenhum registro para exportar.'); return; }
+  const rows = onuRegistros.map(r=>({
+    'Data/Hora': r.data?new Date(r.data).toLocaleString('pt-BR'):'',
+    'Câmera': r.camera||'',
+    'Endereço': r.cameraAddr||'',
+    'Modelo ONU': r.modeloOnu||'',
+    'S/N': r.sn||'',
+    'MAC': r.mac||'',
+    'PON S/N': r.ponSn||'',
+    'PIN': r.pin||'',
+    'Técnico': r.tecnico||'',
+    'Foto Antiga': r.fotoAntiga?'Sim':'Não',
+    'Foto Nova': r.fotoNova?'Sim':'Não',
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  // Column widths
+  ws['!cols']=[{wch:18},{wch:16},{wch:30},{wch:18},{wch:18},{wch:18},{wch:18},{wch:10},{wch:18},{wch:10},{wch:10}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Trocas ONU');
+  const date = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb, `trocas-onu-${date}.xlsx`);
+  showToast('✓ Excel exportado!');
+}
+
+
+function renderSubNav(){
+  return `<div style="display:flex;gap:8px;margin-bottom:22px;flex-wrap:wrap">
+    <button class="btn ${campoSubPage==='home'?'btn-primary':'btn-ghost'} btn-sm" onclick="campoSubPage='home';render()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Chamados em Campo
+    </button>
+    <button class="btn ${campoSubPage==='troca-onu'||campoSubPage==='troca-onu-form'||campoSubPage==='troca-onu-lista'?'btn-primary':'btn-ghost'} btn-sm" onclick="campoSubPage='troca-onu';render()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+      Troca ONU
+    </button>
+  </div>`;
+}
 // ── BOOT ─────────────────────────────────────────────────────────────────────
 init();
 </script>
