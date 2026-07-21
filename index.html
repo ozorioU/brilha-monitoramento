@@ -1413,16 +1413,17 @@ function parseKml(kmlText){
 
     if(!status){
       // Check by style id name patterns
-      // Use word-boundary style checks to avoid 'icon-1500' matching 'icon-1'
-      // ci-1 = offline, ci-2 = online (exact match)
-      if(/\bci-1\b|\bicon-1\b/.test(id) || /offline|vermelho|deslig/i.test(id)) status = 'offline';
-      else if(/\bci-2\b|\bicon-2\b/.test(id) || /online|verde|lig(?!ht)/i.test(id)) status = 'online';
+      // CONFIRMED by pixel analysis of this KMZ:
+      // ci-1 / icon-1 = GREEN = online
+      // ci-2 / icon-2 = RED = offline
+      if(/ci-2|icon-2/.test(id) || /offline|vermelho|deslig/i.test(id)) status = 'offline';
+      else if(/ci-1|icon-1/.test(id) || /online|verde/i.test(id)) status = 'online';
     }
 
     // Check by icon href URL content
     if(!status){
-      if(/\bicon-1\.|red\b|ff0000|e51c23|f44336|vermelho/i.test(href)) status = 'offline';
-      else if(/\bicon-2\.|\bgreen\b|00e676|4caf50|verde|0f9d58/i.test(href)) status = 'online';
+      if(/icon-2\./.test(href)) status = 'offline';
+      else if(/icon-1\./.test(href)) status = 'online';
       else if(/icon-3\./i.test(href)) status = 'manutencao';
     }
 
