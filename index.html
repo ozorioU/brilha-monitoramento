@@ -3387,6 +3387,7 @@ let atu_updates     = {};   // {planilha_id: [{camera_nome, status_novo, atualiz
 let atu_activePlan  = null; // currently viewed planilha id
 let atu_search      = '';
 let atu_filterReg   = '';
+let atu_filterStatus = ''; // '' | 'online' | 'offline' | 'atualizado' | 'pendente'
 let atu_loading     = false;
 
 async function loadAtualizacoes(){
@@ -3484,6 +3485,20 @@ function renderAtualizacaoCameras(){
   let filtered = cameras;
   if(atu_search) filtered = filtered.filter(c=>Object.values(c).join(' ').toLowerCase().includes(atu_search.toLowerCase()));
   if(atu_filterReg) filtered = filtered.filter(c=>(c['Região']||c['Regiao']||'')===atu_filterReg);
+  if(atu_filterStatus==='online') filtered = filtered.filter(c=>{
+    const s=(c['Status 18/08']||c['Status']||'').toLowerCase(); return s.includes('online');
+  });
+  if(atu_filterStatus==='offline') filtered = filtered.filter(c=>{
+    const s=(c['Status 18/08']||c['Status']||'').toLowerCase(); return s.includes('offline');
+  });
+  if(atu_filterStatus==='atualizado') filtered = filtered.filter(c=>{
+    const nome=c['Nome']||Object.values(c)[0]||'';
+    return plan && getLastStatus(plan.id, nome)!==null;
+  });
+  if(atu_filterStatus==='pendente') filtered = filtered.filter(c=>{
+    const nome=c['Nome']||Object.values(c)[0]||'';
+    return !plan || getLastStatus(plan.id, nome)===null;
+  });
 
   return `<div style="max-width:1100px">
     <!-- Header -->
@@ -3517,7 +3532,7 @@ function renderAtualizacaoCameras(){
 
     <!-- Planilha selector tabs -->
     ${atu_planilhas.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;overflow-x:auto;padding-bottom:4px">
-      ${atu_planilhas.map(p=>`<button class="btn btn-sm ${atu_activePlan===p.id?'btn-primary':'btn-ghost'}" onclick="atu_activePlan='${p.id}';atu_search='';atu_filterReg='';render()" style="white-space:nowrap;flex-shrink:0">
+      ${atu_planilhas.map(p=>`<button class="btn btn-sm ${atu_activePlan===p.id?'btn-primary':'btn-ghost'}" onclick="atu_activePlan='${p.id}';atu_search='';atu_filterReg='';atu_filterStatus='';render()" style="white-space:nowrap;flex-shrink:0">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
         ${p.planilha_nome||'Planilha'} — ${new Date(p.upload_date).toLocaleDateString('pt-BR')}
       </button>`).join('')}
@@ -3537,12 +3552,23 @@ function renderAtualizacaoCameras(){
     </div>`:''}
 
     <!-- Filters -->
-    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-      <input class="f-input" placeholder="🔍 Buscar câmera..." style="flex:1;min-width:200px;padding:8px 12px;font-size:13px" value="${atu_search}" oninput="atu_search=this.value;render()"/>
-      ${regioes.length>0?`<select class="f-input" style="padding:8px 12px;font-size:13px;min-width:160px" onchange="atu_filterReg=this.value;render()">
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <input class="f-input" placeholder="🔍 Buscar câmera..." style="flex:1;min-width:180px;padding:8px 12px;font-size:13px" value="${atu_search}" oninput="atu_search=this.value;render()"/>
+      ${regioes.length>0?`<select class="f-input" style="padding:8px 12px;font-size:13px;min-width:150px" onchange="atu_filterReg=this.value;render()">
         <option value="">Todas as regiões</option>
         ${regioes.map(r=>`<option value="${r}" ${atu_filterReg===r?'selected':''}>${r}</option>`).join('')}
       </select>`:''}
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+      ${[
+        {v:'',       label:'Todos',       count: cameras.length},
+        {v:'online', label:'🟢 Online',   count: cameras.filter(c=>(c['Status 18/08']||c['Status']||'').toLowerCase().includes('online')).length},
+        {v:'offline',label:'🔴 Offline',  count: cameras.filter(c=>(c['Status 18/08']||c['Status']||'').toLowerCase().includes('offline')).length},
+        {v:'atualizado',label:'✅ Atualizadas', count: plan?cameras.filter(c=>getLastStatus(plan.id,c['Nome']||Object.values(c)[0]||'')!==null).length:0},
+        {v:'pendente',  label:'⏳ Pendentes',   count: plan?cameras.filter(c=>getLastStatus(plan.id,c['Nome']||Object.values(c)[0]||'')===null).length:cameras.length},
+      ].map(f=>`<button class="btn btn-sm ${atu_filterStatus===f.v?'btn-primary':'btn-ghost'}" onclick="atu_filterStatus='${f.v}';render()">
+        ${f.label} <span style="opacity:.7;font-size:10px">(${f.count})</span>
+      </button>`).join('')}
     </div>
 
     <!-- Cameras table -->
