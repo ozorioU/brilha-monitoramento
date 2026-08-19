@@ -3444,7 +3444,7 @@ async function uploadPlanilha(file){
   atu_loading = false; render();
 }
 
-async function salvarStatusCam(planilhaId, cameraNome, statusNovo){
+async function salvarStatusCam(planilhaId, cameraNome, statusNovo, inputId=''){
   if(!statusNovo.trim()) return;
   const update = {
     id: 'UPD-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),
@@ -3550,7 +3550,7 @@ function renderAtualizacaoCameras(){
 
     <!-- Filters -->
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-      <input class="f-input" placeholder="🔍 Buscar câmera..." style="flex:1;min-width:180px;padding:8px 12px;font-size:13px" value="${atu_search}" oninput="atu_search=this.value;render()"/>
+      <input class="f-input" id="atu-search-input" placeholder="🔍 Buscar câmera..." style="flex:1;min-width:180px;padding:8px 12px;font-size:13px" value="${atu_search}" oninput="atu_search=this.value;debouncedAtuRender()"/>
       ${regioes.length>0?`<select class="f-input" style="padding:8px 12px;font-size:13px;min-width:150px" onchange="atu_filterReg=this.value;render()">
         <option value="">Todas as regiões</option>
         ${regioes.map(r=>`<option value="${r}" ${atu_filterReg===r?'selected':''}>${r}</option>`).join('')}
@@ -3612,13 +3612,13 @@ function renderAtualizacaoCameras(){
                   </div>`:''}
                   <div style="display:flex;gap:6px">
                     <input id="${inputId}" class="f-input" placeholder="Digite o status..." style="flex:1;padding:6px 10px;font-size:12px;min-width:0"
-                      onkeydown="if(event.key==='Enter'){salvarStatusCam('${plan.id}','${nome.replace(/'/g,"\\'")}',this.value);this.value='';}"
+                      onkeydown="if(event.key==='Enter'){salvarStatusCam('${plan.id}','${nome.replace(/'/g,"\\'")}',this.value,'${inputId}');this.value='';}"
                     />
-                    <button class="btn btn-primary btn-sm" style="flex-shrink:0;padding:6px 10px" onclick="salvarStatusCam('${plan.id}','${nome.replace(/'/g,"\\'")}',document.getElementById('${inputId}').value);document.getElementById('${inputId}').value=''">✓</button>
+                    <button class="btn btn-primary btn-sm" style="flex-shrink:0;padding:6px 10px" onclick="salvarStatusCam('${plan.id}','${nome.replace(/'/g,"\\'")}',document.getElementById('${inputId}').value,'${inputId}');document.getElementById('${inputId}').value=''">✓</button>
                   </div>
                 </td>
                 <td style="padding:10px 14px">
-                  ${hist.length>0?`<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 8px" onclick="showAtuHist('${plan.id}','${nome.replace(/'/g,"\\'")}')">
+                  ${hist.length>0?`<button class="btn btn-ghost btn-sm atu-hist-btn" style="font-size:11px;padding:4px 8px" onclick="showAtuHist('${plan.id}','${nome.replace(/'/g,"\\'")}')">
                     ${hist.length} registro${hist.length>1?'s':''}
                   </button>`:'<span style="color:var(--text-muted);font-size:11px">—</span>'}
                 </td>
@@ -3689,6 +3689,19 @@ function exportAtualizacaoExcel(planId){
   showToast('✓ Excel exportado!');
 }
 
+
+let _atuRenderTimer = null;
+function debouncedAtuRender(){
+  clearTimeout(_atuRenderTimer);
+  _atuRenderTimer = setTimeout(()=>{ 
+    const el = document.getElementById('atu-search-input');
+    const pos = el ? el.selectionStart : null;
+    render();
+    // Restore focus and cursor position after render
+    const newEl = document.getElementById('atu-search-input');
+    if(newEl){ newEl.focus(); if(pos!==null) try{newEl.setSelectionRange(pos,pos);}catch(e){} }
+  }, 300);
+}
 // ── BOOT ─────────────────────────────────────────────────────────────────────
 init();
 </script>
