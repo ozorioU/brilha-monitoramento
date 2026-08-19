@@ -32,7 +32,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Roboto
 .sb-nav{flex:1;padding:10px 0;overflow-y:auto;}
 .sb-sec{padding:8px 16px 4px;font-size:10px;color:var(--accent2);text-transform:uppercase;letter-spacing:2px;}
 .sb-sep{height:1px;background:rgba(202,157,74,.1);margin:6px 16px;}
-.nav-sub{display:flex;align-items:center;gap:9px;padding:8px 16px 8px 32px;cursor:pointer;transition:all .2s;color:var(--text-muted);border-left:3px solid transparent;font-size:12px;user-select:none;}
+.nav-sub{display:flex;align-items:center;gap:9px;padding:9px 16px 9px 28px;cursor:pointer;transition:all .2s;color:var(--text-dim);border-left:3px solid transparent;font-size:13px;user-select:none;}
 .nav-sub:hover{background:rgba(202,157,74,.05);color:var(--text);}
 .nav-sub.active{background:rgba(202,157,74,.08);color:var(--accent);border-left-color:var(--accent);}
 .nav-sub svg{width:14px;height:14px;flex-shrink:0;}
@@ -882,9 +882,6 @@ function renderShell(){
         ${navItems.some(n=>n.section)?`
         <div class="sb-sep"></div>
         <div class="sb-sec">Campo</div>
-        <div class="nav-item${page==='campo'?' active':''}" onclick="goPage('campo');campoSubPage='home';">
-          ${IC.campo}Técnico / Campo
-        </div>
         <div class="nav-sub${page==='campo'&&campoSubPage==='home'?' active':''}" onclick="goPage('campo');campoSubPage='home';">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
           Chamados em Campo
