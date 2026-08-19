@@ -645,7 +645,7 @@ let leafletMap = null, markersLayer = null, selectedCam = null;
 let openTicketId = null, showNewTicket = false, showImportModal = false;
 let camHistoryId = null, previewImg = null;
 let showUserModal = false, editUserId = null, deleteUserId = null, showChangePassword = false, deleteTicketId = null;
-let campoSubPage = 'home'; // 'home' | 'troca-onu' | 'troca-onu-form' | 'troca-onu-lista'
+let campoSubPage = 'home'; // 'home' | 'troca-onu' | 'troca-onu-form' | 'troca-onu-lista' | 'atualizacao' // 'home' | 'troca-onu' | 'troca-onu-form' | 'troca-onu-lista'
 let onuForm = {}; // current ONU form data
 let onuRegistros = []; // all ONU records
 let onuFormStep = 1; // 1=camera, 2=dados, 3=fotos
@@ -720,6 +720,7 @@ async function init(){
   loadChartData();
   await loadManualStats();
   await loadOnuRegistros();
+  await loadAtualizacoes();
   // Auto-fill and auto-login if remember me was checked
   try{
     if(localStorage.getItem('brilha_remember')==='1'){
@@ -892,6 +893,10 @@ function renderShell(){
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
           Troca ONU
         </div>
+        <div class="nav-sub${page==='campo'&&campoSubPage==='atualizacao'?' active':''}" onclick="goPage('campo');campoSubPage='atualizacao';">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Atualização Câmeras
+        </div>
       `:''}
       </nav>
       <div class="sb-user">
@@ -932,6 +937,7 @@ function renderShell(){
   ${deleteUserId?renderDeleteConfirm():''}
   ${showChangePassword?renderChangePasswordModal():''}
   ${deleteTicketId?renderDeleteTicketConfirm():''}
+  ${atuHistModal?renderAtuHistModal():''}
   ${showEditStats?renderEditStatsModal():''}`;
 }
 
@@ -2673,6 +2679,7 @@ function renderCampo(){
   if(campoSubPage==='troca-onu'||campoSubPage==='troca-onu-form'||campoSubPage==='troca-onu-lista'){
     return renderTrocaOnu();
   }
+  if(campoSubPage==='atualizacao') return renderAtualizacaoCameras();
   // Default: chamados em campo
   const myTickets = er==='tech'
     ? tickets.filter(t => t.techId===currentUser.id || t.tech_id===currentUser.id)
@@ -2847,6 +2854,7 @@ function renderTrocaOnu(){
 async function reloadOnuRegistros(){
   showToast('🔄 Atualizando registros...');
   await loadOnuRegistros();
+  await loadAtualizacoes();
   showToast('✓ Registros atualizados!');
   render();
 }
@@ -3372,6 +3380,292 @@ function closeMobMenu(){
   if(sidebar) sidebar.classList.remove('mob-open');
   if(overlay) overlay.classList.remove('show');
 }
+
+// ── ATUALIZAÇÃO CÂMERAS ───────────────────────────────────────────────────────
+let atu_planilhas   = [];   // list of uploaded planilhas
+let atu_updates     = {};   // {planilha_id: [{camera_nome, status_novo, atualizado_por, atualizado_em}]}
+let atu_activePlan  = null; // currently viewed planilha id
+let atu_search      = '';
+let atu_filterReg   = '';
+let atu_loading     = false;
+
+async function loadAtualizacoes(){
+  try{
+    const data = await sbGet('cam_atualizacoes','select=*&order=upload_date.desc');
+    atu_planilhas = data || [];
+    // Load updates for each planilha
+    if(atu_planilhas.length > 0){
+      const upds = await sbGet('cam_status_updates','select=*&order=atualizado_em.desc');
+      atu_updates = {};
+      (upds||[]).forEach(u=>{
+        if(!atu_updates[u.planilha_id]) atu_updates[u.planilha_id]=[];
+        atu_updates[u.planilha_id].push(u);
+      });
+    }
+    if(!atu_activePlan && atu_planilhas.length > 0) atu_activePlan = atu_planilhas[0].id;
+  } catch(e){
+    console.error('loadAtualizacoes error:', e);
+  }
+}
+
+async function uploadPlanilha(file){
+  if(!window.XLSX){ showToast('⚠ Biblioteca Excel não carregada'); return; }
+  atu_loading = true; render();
+  try{
+    const ab = await file.arrayBuffer();
+    const wb = XLSX.read(ab, {type:'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1});
+    if(!rows || rows.length < 2){ showToast('⚠ Planilha vazia ou inválida'); atu_loading=false; render(); return; }
+
+    // Build cameras array from rows
+    const headers = rows[0].map(h=>String(h||'').trim());
+    const cameras = rows.slice(1).filter(r=>r[0]).map(r=>{
+      const obj={};
+      headers.forEach((h,i)=>{ obj[h] = r[i]!==undefined ? String(r[i]).trim() : ''; });
+      return obj;
+    });
+
+    const planilhaId = 'PLN-'+Date.now();
+    const payload = {
+      id: planilhaId,
+      planilha_nome: file.name,
+      upload_date: new Date().toISOString(),
+      cameras: cameras,
+      criado_por: currentUser.name
+    };
+
+    await sbPost('cam_atualizacoes', payload);
+    atu_planilhas.unshift({...payload});
+    atu_activePlan = planilhaId;
+    showToast('✓ Planilha importada — '+cameras.length+' câmeras');
+  } catch(e){
+    showToast('⚠ Erro ao importar: '+e.message);
+    console.error(e);
+  }
+  atu_loading = false; render();
+}
+
+async function salvarStatusCam(planilhaId, cameraNome, statusNovo){
+  if(!statusNovo.trim()) return;
+  const update = {
+    id: 'UPD-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),
+    planilha_id: planilhaId,
+    camera_nome: cameraNome,
+    status_novo: statusNovo.trim(),
+    atualizado_por: currentUser.name,
+    atualizado_em: new Date().toISOString()
+  };
+  try{
+    await sbPost('cam_status_updates', update);
+  } catch(e){ console.error('salvarStatus error:', e); }
+  if(!atu_updates[planilhaId]) atu_updates[planilhaId]=[];
+  atu_updates[planilhaId].unshift(update);
+  showToast('✓ Status salvo');
+  render();
+}
+
+function getLastStatus(planilhaId, cameraNome){
+  const upds = (atu_updates[planilhaId]||[]).filter(u=>u.camera_nome===cameraNome);
+  return upds.length > 0 ? upds[0] : null;
+}
+
+function getStatusHistory(planilhaId, cameraNome){
+  return (atu_updates[planilhaId]||[]).filter(u=>u.camera_nome===cameraNome);
+}
+
+function renderAtualizacaoCameras(){
+  const er = effRole();
+  const plan = atu_planilhas.find(p=>p.id===atu_activePlan);
+  const cameras = plan ? (plan.cameras||[]) : [];
+
+  // Filter
+  const regioes = [...new Set(cameras.map(c=>c['Região']||c['Regiao']||c['Region']||'').filter(Boolean))].sort();
+  let filtered = cameras;
+  if(atu_search) filtered = filtered.filter(c=>Object.values(c).join(' ').toLowerCase().includes(atu_search.toLowerCase()));
+  if(atu_filterReg) filtered = filtered.filter(c=>(c['Região']||c['Regiao']||'')===atu_filterReg);
+
+  return `<div style="max-width:1100px">
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+      <div>
+        <div style="font-size:18px;font-weight:500">Atualização de Câmeras</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Importe uma planilha e registre o status de cada câmera</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${er==='admin'?`<label style="cursor:pointer">
+          <div class="btn btn-primary btn-sm">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            ${atu_loading?'Importando...':'Importar Planilha'}
+          </div>
+          <input type="file" accept=".xlsx,.xls,.csv" style="display:none" ${atu_loading?'disabled':''} onchange="uploadPlanilha(this.files[0])"/>
+        </label>`:''}
+        ${er==='admin'&&cameras.length>0?`<button class="btn btn-ghost btn-sm" onclick="exportAtualizacaoExcel('${atu_activePlan}')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Exportar Excel
+        </button>`:''}
+      </div>
+    </div>
+
+    ${atu_planilhas.length===0?`
+    <div style="background:var(--bg3);border:2px dashed rgba(202,157,74,.3);border-radius:12px;padding:60px;text-align:center">
+      <div style="font-size:48px;margin-bottom:16px">📊</div>
+      <div style="font-size:16px;font-weight:500;margin-bottom:8px">Nenhuma planilha importada</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px">Importe uma planilha Excel com as câmeras e seus status</div>
+      ${er==='admin'?`<label style="cursor:pointer"><div class="btn btn-primary">📂 Importar primeira planilha</div><input type="file" accept=".xlsx,.xls" style="display:none" onchange="uploadPlanilha(this.files[0])"/></label>`:'<div style="color:var(--text-muted)">Aguardando o administrador importar uma planilha</div>'}
+    </div>`:`
+
+    <!-- Planilha selector tabs -->
+    ${atu_planilhas.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;overflow-x:auto;padding-bottom:4px">
+      ${atu_planilhas.map(p=>`<button class="btn btn-sm ${atu_activePlan===p.id?'btn-primary':'btn-ghost'}" onclick="atu_activePlan='${p.id}';atu_search='';atu_filterReg='';render()" style="white-space:nowrap;flex-shrink:0">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        ${p.planilha_nome||'Planilha'} — ${new Date(p.upload_date).toLocaleDateString('pt-BR')}
+      </button>`).join('')}
+    </div>`:''}
+
+    <!-- Current planilha info -->
+    ${plan?`<div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;flex-wrap:wrap;gap:12px">
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:500">${plan.planilha_nome||'Planilha'}</div>
+        <div style="font-size:11px;color:var(--text-muted)">Importada por ${plan.criado_por||'—'} em ${new Date(plan.upload_date).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+      </div>
+      <div style="display:flex;gap:16px;font-size:12px">
+        <div><span style="color:var(--accent);font-weight:600">${cameras.length}</span> <span style="color:var(--text-muted)">câmeras</span></div>
+        <div><span style="color:var(--green);font-weight:600">${(atu_updates[plan.id]||[]).reduce((acc,u)=>{if(!acc.has(u.camera_nome))acc.add(u.camera_nome);return acc;},new Set()).size}</span> <span style="color:var(--text-muted)">atualizadas</span></div>
+        <div><span style="color:var(--yellow);font-weight:600">${cameras.length-(atu_updates[plan.id]||[]).reduce((acc,u)=>{if(!acc.has(u.camera_nome))acc.add(u.camera_nome);return acc;},new Set()).size}</span> <span style="color:var(--text-muted)">pendentes</span></div>
+      </div>
+    </div>`:''}
+
+    <!-- Filters -->
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <input class="f-input" placeholder="🔍 Buscar câmera..." style="flex:1;min-width:200px;padding:8px 12px;font-size:13px" value="${atu_search}" oninput="atu_search=this.value;render()"/>
+      ${regioes.length>0?`<select class="f-input" style="padding:8px 12px;font-size:13px;min-width:160px" onchange="atu_filterReg=this.value;render()">
+        <option value="">Todas as regiões</option>
+        ${regioes.map(r=>`<option value="${r}" ${atu_filterReg===r?'selected':''}>${r}</option>`).join('')}
+      </select>`:''}
+    </div>
+
+    <!-- Cameras table -->
+    <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:10px;overflow:hidden">
+      <div style="padding:12px 16px;border-bottom:1px solid rgba(202,157,74,.1);font-size:12px;color:var(--text-muted)">
+        Mostrando ${filtered.length} de ${cameras.length} câmeras
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="background:var(--bg4)">
+              <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid rgba(202,157,74,.1);min-width:200px">Câmera</th>
+              <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid rgba(202,157,74,.1)">Região</th>
+              <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid rgba(202,157,74,.1)">Status Planilha</th>
+              <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid rgba(202,157,74,.1)">Modelo</th>
+              <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:500;color:var(--green);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid rgba(202,157,74,.1);min-width:220px">Atualização de Campo</th>
+              <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid rgba(202,157,74,.1)">Histórico</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filtered.map(cam=>{
+              const nome = cam['Nome']||cam['nome']||cam['Camera']||Object.values(cam)[0]||'—';
+              const regiao = cam['Região']||cam['Regiao']||cam['Region']||'';
+              const statusPlan = cam['Status 18/08']||cam['Status']||cam['status']||'';
+              const modelo = cam['Modelo']||cam['modelo']||'';
+              const last = getLastStatus(plan.id, nome);
+              const hist = getStatusHistory(plan.id, nome);
+              const inputId = 'atu-'+nome.replace(/[^a-zA-Z0-9]/g,'_').substring(0,30);
+              const isOnline = statusPlan.toLowerCase().includes('online');
+              const isOffline = statusPlan.toLowerCase().includes('offline');
+              return `<tr style="border-top:1px solid rgba(202,157,74,.05)" onmouseover="this.style.background='rgba(202,157,74,.03)'" onmouseout="this.style.background=''">
+                <td style="padding:10px 14px;font-weight:500;color:var(--text)">${nome}</td>
+                <td style="padding:10px 14px;color:var(--text-muted);white-space:nowrap">${regiao}</td>
+                <td style="padding:10px 14px;white-space:nowrap">
+                  <span style="padding:3px 8px;border-radius:20px;font-size:11px;font-weight:500;background:${isOnline?'rgba(0,230,118,.12)':isOffline?'rgba(255,61,87,.12)':'rgba(202,157,74,.12)'};color:${isOnline?'var(--green)':isOffline?'var(--red)':'var(--accent)'}">
+                    ${statusPlan||'—'}
+                  </span>
+                </td>
+                <td style="padding:10px 14px;color:var(--text-muted);font-size:11px;white-space:nowrap">${modelo}</td>
+                <td style="padding:10px 14px">
+                  ${last?`<div style="margin-bottom:6px;padding:6px 10px;background:rgba(0,230,118,.07);border:1px solid rgba(0,230,118,.2);border-radius:6px">
+                    <div style="font-size:12px;font-weight:500;color:var(--green)">${last.status_novo}</div>
+                    <div style="font-size:10px;color:var(--text-muted);margin-top:2px">por ${last.atualizado_por||'—'} · ${new Date(last.atualizado_em).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
+                  </div>`:''}
+                  <div style="display:flex;gap:6px">
+                    <input id="${inputId}" class="f-input" placeholder="Digite o status..." style="flex:1;padding:6px 10px;font-size:12px;min-width:0"
+                      onkeydown="if(event.key==='Enter'){salvarStatusCam('${plan.id}','${nome.replace(/'/g,"\\'")}',this.value);this.value='';}"
+                    />
+                    <button class="btn btn-primary btn-sm" style="flex-shrink:0;padding:6px 10px" onclick="salvarStatusCam('${plan.id}','${nome.replace(/'/g,"\\'")}',document.getElementById('${inputId}').value);document.getElementById('${inputId}').value=''">✓</button>
+                  </div>
+                </td>
+                <td style="padding:10px 14px">
+                  ${hist.length>0?`<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 8px" onclick="showAtuHist('${plan.id}','${nome.replace(/'/g,"\\'")}')">
+                    ${hist.length} registro${hist.length>1?'s':''}
+                  </button>`:'<span style="color:var(--text-muted);font-size:11px">—</span>'}
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`}
+  </div>`;
+}
+
+// ── HISTORY MODAL ─────────────────────────────────────────────────────────────
+let atuHistModal = null; // {planId, camNome}
+
+function showAtuHist(planId, camNome){
+  atuHistModal = {planId, camNome};
+  render();
+}
+
+function renderAtuHistModal(){
+  if(!atuHistModal) return '';
+  const hist = getStatusHistory(atuHistModal.planId, atuHistModal.camNome);
+  return `<div class="modal-overlay" onclick="if(event.target===this){atuHistModal=null;render()}">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-head">
+      <div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">Histórico de atualizações</div>
+        <div class="modal-title" style="font-size:14px">${atuHistModal.camNome}</div>
+      </div>
+      <button class="icon-btn" onclick="atuHistModal=null;render()">${IC.x}</button>
+    </div>
+    <div class="modal-body" style="max-height:400px;overflow-y:auto">
+      ${hist.length===0?'<div style="text-align:center;color:var(--text-muted);padding:30px">Sem histórico</div>':
+        hist.map(u=>`<div style="padding:12px 0;border-bottom:1px solid rgba(202,157,74,.08)">
+          <div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px">${u.status_novo}</div>
+          <div style="font-size:11px;color:var(--text-muted)">por <strong>${u.atualizado_por||'—'}</strong> · ${new Date(u.atualizado_em).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+        </div>`).join('')
+      }
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="atuHistModal=null;render()">Fechar</button>
+    </div>
+  </div></div>`;
+}
+
+function exportAtualizacaoExcel(planId){
+  if(!window.XLSX){ alert('Biblioteca Excel não carregada.'); return; }
+  const plan = atu_planilhas.find(p=>p.id===planId);
+  if(!plan) return;
+  const cameras = plan.cameras||[];
+  const rows = cameras.map(cam=>{
+    const nome = cam['Nome']||Object.values(cam)[0]||'';
+    const last = getLastStatus(planId, nome);
+    const hist = getStatusHistory(planId, nome);
+    return {
+      ...cam,
+      'Status de Campo': last?last.status_novo:'',
+      'Atualizado por': last?last.atualizado_por:'',
+      'Atualizado em': last?new Date(last.atualizado_em).toLocaleString('pt-BR'):'',
+      'Qtd Atualizações': hist.length
+    };
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Atualização Câmeras');
+  XLSX.writeFile(wb, 'atualizacao-cameras-'+new Date().toISOString().split('T')[0]+'.xlsx');
+  showToast('✓ Excel exportado!');
+}
+
 // ── BOOT ─────────────────────────────────────────────────────────────────────
 init();
 </script>
