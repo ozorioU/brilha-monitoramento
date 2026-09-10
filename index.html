@@ -951,7 +951,7 @@ function renderPage(){
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
 function renderDashboard(){
   const er=effRole();
-  const on=getOnline(),off=getOffline(),tot=CAMERAS.length,pct=Math.round(on/tot*100);
+  const on=getOnline(),off=getOffline(),tot=getTotal(),pct=Math.round(on/tot*100);
   const tks=er==='tech'?myTks():tickets;
   return `
   ${er==='admin'?`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
@@ -1744,10 +1744,7 @@ async function applyImport(){
     // Strategy: upsert by name (requires UNIQUE constraint on name column)
     // Run this SQL once in Supabase if not done yet:
     // ALTER TABLE cameras ADD CONSTRAINT cameras_name_key UNIQUE (name);
-    // Log sample of what we're sending
-    const sample = CAMERAS.slice(0,3).map(c=>c.name+':'+c.status).join(', ');
-    console.log('Sending to DB (sample):', sample);
-
+    let syncErrors = 0;
     for(const chunk of chunks){
       const resp = await fetch(`${SB_URL}/rest/v1/cameras?on_conflict=name`, {
         method: 'POST',
@@ -1760,9 +1757,21 @@ async function applyImport(){
       });
       if(!resp.ok){
         const t = await resp.text();
-        throw new Error('Upsert: HTTP '+resp.status+' — '+t.substring(0,150));
+        console.warn('Chunk upsert failed:', resp.status, t.substring(0,150));
+        // Try one by one to save at least the ones that work
+        for(const cam of chunk){
+          try{
+            const r2 = await fetch(`${SB_URL}/rest/v1/cameras?on_conflict=name`, {
+              method: 'POST',
+              headers: {...SB_HEADERS, 'Prefer': 'return=minimal,resolution=merge-duplicates'},
+              body: JSON.stringify([{name:cam.name, address:cam.address, lat:cam.lat, lng:cam.lng, status:cam.status, ip:cam.ip, model:cam.model, location:cam.location}])
+            });
+            if(!r2.ok) syncErrors++;
+          } catch(e){ syncErrors++; }
+        }
       }
     }
+    if(syncErrors > 0) console.warn(syncErrors+' cameras failed to sync to DB');
     // Verify: reload cameras from DB to confirm status was saved
     try{
       const dbCams = await sbGet('cameras','select=name,status&order=id.asc&limit=5');
