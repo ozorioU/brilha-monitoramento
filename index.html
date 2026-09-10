@@ -1744,34 +1744,34 @@ async function applyImport(){
     // Strategy: upsert by name (requires UNIQUE constraint on name column)
     // Run this SQL once in Supabase if not done yet:
     // ALTER TABLE cameras ADD CONSTRAINT cameras_name_key UNIQUE (name);
-    let syncErrors = 0;
+    // PATCH each camera by name to force status update
+    // Using PATCH with name filter is more reliable than upsert for status updates
+    let syncOk = 0, syncFail = 0;
+    // First: upsert new cameras (INSERT if not exists, ignore if exists)
     for(const chunk of chunks){
-      const resp = await fetch(`${SB_URL}/rest/v1/cameras?on_conflict=name`, {
+      await fetch(`${SB_URL}/rest/v1/cameras?on_conflict=name`, {
         method: 'POST',
-        headers: {...SB_HEADERS, 'Prefer': 'return=minimal,resolution=merge-duplicates'},
+        headers: {...SB_HEADERS, 'Prefer': 'return=minimal,resolution=ignore-duplicates'},
         body: JSON.stringify(chunk.map(c=>({
-          name:c.name, address:c.address,
-          lat:c.lat, lng:c.lng, status:c.status,
-          ip:c.ip, model:c.model, location:c.location
+          name:c.name, address:c.address, lat:c.lat, lng:c.lng,
+          status:c.status, ip:c.ip, model:c.model, location:c.location
         })))
-      });
-      if(!resp.ok){
-        const t = await resp.text();
-        console.warn('Chunk upsert failed:', resp.status, t.substring(0,150));
-        // Try one by one to save at least the ones that work
-        for(const cam of chunk){
-          try{
-            const r2 = await fetch(`${SB_URL}/rest/v1/cameras?on_conflict=name`, {
-              method: 'POST',
-              headers: {...SB_HEADERS, 'Prefer': 'return=minimal,resolution=merge-duplicates'},
-              body: JSON.stringify([{name:cam.name, address:cam.address, lat:cam.lat, lng:cam.lng, status:cam.status, ip:cam.ip, model:cam.model, location:cam.location}])
-            });
-            if(!r2.ok) syncErrors++;
-          } catch(e){ syncErrors++; }
-        }
-      }
+      }).catch(()=>{});
     }
-    if(syncErrors > 0) console.warn(syncErrors+' cameras failed to sync to DB');
+    // Then: PATCH status for ALL cameras by name (this always updates existing)
+    for(const cam of CAMERAS){
+      try{
+        const r = await fetch(
+          `${SB_URL}/rest/v1/cameras?name=eq.${encodeURIComponent(cam.name)}`,
+          { method:'PATCH',
+            headers:{...SB_HEADERS,'Prefer':'return=minimal'},
+            body:JSON.stringify({status:cam.status})
+          }
+        );
+        if(r.ok) syncOk++; else syncFail++;
+      } catch(e){ syncFail++; }
+    }
+    console.log(`Status sync: ${syncOk} ok, ${syncFail} failed`);
     // Verify: reload cameras from DB to confirm status was saved
     try{
       const dbCams = await sbGet('cameras','select=name,status&order=id.asc&limit=5');
