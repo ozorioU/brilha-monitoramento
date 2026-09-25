@@ -912,7 +912,9 @@ function renderShell(){
           <div class="topbar-title">${titles[page]||''}</div>
         </div>
         <div class="topbar-right">
-          ${currentUser.role==='admin'&&viewAs==='admin'?`<button class="btn btn-ghost btn-sm" onclick="openImportModal()" style="border-color:var(--accent);color:var(--accent);font-weight:700">⬆ Importar KMZ</button>`:''}
+          ${currentUser.role==='admin'&&viewAs==='admin'?`
+          ${page==='cameras'?`<button class="btn btn-ghost btn-sm" onclick="forceSyncCameraStatus()" title="Forçar sincronização de status no banco" style="color:var(--green);border-color:var(--green)">🔄 Sync Status</button>`:''}
+          <button class="btn btn-ghost btn-sm" onclick="openImportModal()" style="border-color:var(--accent);color:var(--accent);font-weight:700">⬆ Importar KMZ</button>`:''}
           ${currentUser.role==='admin'?`<div class="view-toggle">
             <button class="vt-btn${viewAs==='admin'?' active':''}" onclick="setView('admin')">${IC.settings} Admin</button>
             <button class="vt-btn${viewAs==='tech'?' active':''}" onclick="setView('tech')">${IC.campo} Técnico</button>
