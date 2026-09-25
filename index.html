@@ -1580,15 +1580,15 @@ function parseKml(kmlText){
       // CONFIRMED by pixel analysis of this KMZ:
       // ci-1 / icon-1 = GREEN = online
       // ci-2 / icon-2 = RED = offline
-      // ci-1 = online (green), ci-2 = offline (red) — confirmed for this KMZ
-      if(id.includes('ci-2') || id.includes('icon-2') || /offline|vermelho|deslig/i.test(id)) status = 'offline';
-      else if(id.includes('ci-1') || id.includes('icon-1') || /online|verde/i.test(id)) status = 'online';
+      // PIXEL VERIFIED: icon-1.png=#b94c43(RED)=offline, icon-2.png=#43b95c(GREEN)=online
+      if(id.includes('ci-1') || href.includes('icon-1') || /offline|vermelho|deslig/i.test(id)) status = 'offline';
+      else if(id.includes('ci-2') || href.includes('icon-2') || id.includes('ci-2-labelson-nodesc') || /online|verde/i.test(id)) status = 'online';
     }
 
     // Check by icon href URL content
     if(!status){
-      if(href.includes('icon-2')) status = 'offline';
-      else if(href.includes('icon-1')) status = 'online';
+      if(href.includes('icon-1')) status = 'offline';
+      else if(href.includes('icon-2')) status = 'online';
       else if(/icon-3\./i.test(href)) status = 'manutencao';
     }
 
