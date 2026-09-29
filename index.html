@@ -1430,6 +1430,16 @@ function renderCamHistoryModal(){
         </div>`).join('')}
       </div>`}
     </div>
+    <!-- Nota técnica manual -->
+    <div style="padding:14px 22px;background:var(--bg3);border-top:1px solid rgba(202,157,74,.12)">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">📝 Inserir no Histórico</div>
+      <div style="display:flex;gap:8px">
+        <textarea id="cam-note-${cam.id}" rows="2" class="f-input" placeholder="Descreva a situação, manutenção realizada, observação técnica..." style="flex:1;resize:none;font-size:13px;padding:8px 12px;">${camNoteInput[cam.id]||''}</textarea>
+        <button class="btn btn-primary" style="flex-shrink:0;align-self:flex-end;padding:8px 14px" onclick="salvarNotaCam(${cam.id})">
+          ✓ Salvar
+        </button>
+      </div>
+    </div>
     <div class="modal-foot" style="justify-content:space-between">
       <div style="display:flex;gap:8px">
         <button class="btn btn-ghost btn-sm" onclick="closeCamHistory();selectedCam=CAMERAS.find(c=>c.id===${cam.id});openNewTicket()">${IC.plus} Novo Chamado</button>
