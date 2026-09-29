@@ -1372,7 +1372,7 @@ function renderNewTicketModal(){
 let CAM_HISTORY={};
 function buildCamHistory(){
   CAM_HISTORY={};
-  tickets.filter(t=>t.status==='Finalizado').forEach(t=>{
+  tickets.filter(t=>t.status==='Finalizado'||t.status==='Nota Técnica').forEach(t=>{
     const cid=t.cameraId||t.camera_id;
     if(!CAM_HISTORY[cid]) CAM_HISTORY[cid]=[];
     const last=t.timeline[t.timeline.length-1];
@@ -1416,7 +1416,11 @@ function renderCamHistoryModal(){
               <div><div style="font-size:13px;font-weight:500">${v.techName}</div><div style="font-size:11px;color:var(--text-muted)">${fmtDate(v.date)}</div></div>
               ${i===0?'<span style="font-size:10px;background:rgba(202,157,74,.15);color:var(--accent);padding:2px 8px;border-radius:10px">RECENTE</span>':''}
             </div>
-            <div style="display:flex;gap:8px;align-items:center"><span class="tk-priority p-${v.priority.toLowerCase()}">${v.priority}</span><span style="font-size:11px;color:var(--text-muted);font-family:monospace">${v.ticketId}</span><span style="font-size:11px;color:var(--text-muted)">⏱ ${v.duration}</span></div>
+            <div style="display:flex;gap:8px;align-items:center">
+              ${v.isManual?'<span style="font-size:10px;background:rgba(167,139,250,.15);color:var(--purple);padding:2px 8px;border-radius:10px">NOTA TÉCNICA</span>':'<span class="tk-priority p-'+v.priority.toLowerCase()+'">'+v.priority+'</span>'}
+              <span style="font-size:11px;color:var(--text-muted);font-family:monospace">${v.ticketId}</span>
+              ${!v.isManual?`<span style="font-size:11px;color:var(--text-muted)">⏱ ${v.duration}</span>`:''}
+            </div>
           </div>
           <div style="padding:14px 16px;display:grid;grid-template-columns:1fr 1fr;gap:14px">
             <div><div style="font-size:10px;font-weight:500;color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px">Causa</div><div style="font-size:13px;color:var(--text);line-height:1.6;background:rgba(255,61,87,.06);border:1px solid rgba(255,61,87,.15);border-radius:6px;padding:10px">${v.cause||'Não informado'}</div></div>
