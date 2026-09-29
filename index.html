@@ -644,6 +644,7 @@ let USERS = [], tickets = [];
 let leafletMap = null, markersLayer = null, selectedCam = null;
 let openTicketId = null, showNewTicket = false, showImportModal = false;
 let camHistoryId = null, previewImg = null;
+let camNoteInput = {};
 let showUserModal = false, editUserId = null, deleteUserId = null, showChangePassword = false, deleteTicketId = null;
 let campoSubPage = 'home'; // 'home' | 'troca-onu' | 'troca-onu-form' | 'troca-onu-lista' | 'atualizacao' // 'home' | 'troca-onu' | 'troca-onu-form' | 'troca-onu-lista'
 let onuForm = {}; // current ONU form data
@@ -3726,6 +3727,46 @@ function debouncedAtuRender(){
     const newEl = document.getElementById('atu-search-input');
     if(newEl){ newEl.focus(); if(pos!==null) try{newEl.setSelectionRange(pos,pos);}catch(e){} }
   }, 300);
+}
+
+async function salvarNotaCam(camId){
+  const el = document.getElementById('cam-note-'+camId);
+  if(!el) return;
+  const text = el.value.trim();
+  if(!text){ showToast('⚠ Escreva algo antes de salvar'); return; }
+  const cam = CAMERAS.find(c=>c.id===camId);
+  if(!cam) return;
+  const now = new Date().toISOString();
+  const notaId = 'NOTA-'+Date.now();
+  const nota = {
+    id: notaId,
+    title: 'Nota Técnica — '+cam.name,
+    camera_id: camId,
+    status: 'Nota Técnica',
+    priority: 'Normal',
+    requester_name: currentUser.name,
+    requester_email: currentUser.email,
+    requester_phone: currentUser.phone||'',
+    description: text,
+    tech_id: currentUser.id,
+    displacement: 'Nota manual',
+    images: [],
+    timeline: [{status:'Nota Técnica', date:now, user:currentUser.name, note:text}],
+    created_at: now,
+    updated_at: now
+  };
+  try {
+    await sbPost('tickets', nota);
+    tickets = [normalizeTicket(nota), ...tickets];
+    showToast('✓ Nota salva no histórico!');
+  } catch(e) {
+    tickets = [normalizeTicket(nota), ...tickets];
+    showToast('✓ Nota salva localmente');
+  }
+  camNoteInput[camId] = '';
+  el.value = '';
+  buildCamHistory();
+  showModal(renderCamHistoryModal());
 }
 // ── BOOT ─────────────────────────────────────────────────────────────────────
 init();
