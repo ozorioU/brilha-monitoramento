@@ -3796,16 +3796,21 @@ async function savePedido(p){
   }
 }
 
-async function updatePedidoStatus(id, status, obs=''){
+async function atualizarPedido(id, status, obs=''){
+  const p = pedidos.find(x=>x.id===id); if(!p) return;
+  const newEvent = {acao:status, data:new Date().toISOString(), usuario:currentUser.name, obs:obs.trim()};
+  const newTimeline = [...(p.timeline||[]), newEvent];
+  const newObsAdmin = obs.trim() || p.obs_admin || '';
   try{
     await sbPatch('pedidos_compra','id=eq.'+id,{
-      status, obs_admin: obs,
+      status, obs_admin: newObsAdmin,
+      timeline: newTimeline,
       updated_at: new Date().toISOString()
     });
-    pedidos = pedidos.map(p=>p.id===id?{...p,status,obs_admin:obs,updated_at:new Date().toISOString()}:p);
-    showToast('✓ Status atualizado');
-    render();
-  } catch(e){ showToast('⚠ Erro ao atualizar'); }
+  } catch(e){ console.error('atualizarPedido error:', e); }
+  pedidos = pedidos.map(p=>p.id===id?{...p,status,obs_admin:newObsAdmin,timeline:newTimeline,updated_at:new Date().toISOString()}:p);
+  showToast('✓ Status atualizado: '+status);
+  render();
 }
 
 function addPedidoItem(){
@@ -3821,56 +3826,71 @@ function removePedidoItem(i){
 
 function renderPedidos(){
   const er = effRole();
-  const myPedidos = er==='admin' ? pedidos : pedidos.filter(p=>p.solicitante_email===currentUser.email);
-  const badge = pedidos.filter(p=>p.status==='Aguardando').length;
+  const myPedidos = er==='admin' ? [...pedidos] : pedidos.filter(p=>p.solicitante_email===currentUser.email);
+  const aguardando = pedidos.filter(p=>p.status==='Aguardando').length;
 
-  return `<div style="max-width:900px">
+  return `<div style="display:flex;flex-direction:column;height:100%;min-height:calc(100vh - var(--topbar))">
+    <!-- Header -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
       <div>
         <div style="font-size:18px;font-weight:500">Pedidos de Compras</div>
         <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Solicitação de equipamentos para nova aquisição, reposição ou troca</div>
       </div>
-      <button class="btn btn-primary" onclick="pedidoForm={tipo:'nova_aquisicao',motivo:'',urgencia:'Normal',prazo:'',itens:[{descricao:'',quantidade:1}]};showPedidoModal=true;render()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Novo Pedido
-      </button>
+      <div style="display:flex;gap:8px;align-items:center">
+        ${er==='admin'&&aguardando>0?`<span style="background:rgba(255,61,87,.12);color:var(--red);border:1px solid rgba(255,61,87,.3);padding:3px 10px;border-radius:20px;font-size:12px">${aguardando} aguardando resposta</span>`:''}
+        <button class="btn btn-primary" onclick="pedidoForm={tipo:'nova_aquisicao',motivo:'',urgencia:'Normal',prazo:'',itens:[{descricao:'',quantidade:1}]};showPedidoModal=true;render()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Novo Pedido
+        </button>
+      </div>
     </div>
 
     ${myPedidos.length===0?`
-    <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:12px;padding:60px;text-align:center">
-      <div style="font-size:44px;margin-bottom:14px">🛒</div>
-      <div style="font-size:15px;font-weight:500;margin-bottom:8px">Nenhum pedido encontrado</div>
-      <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px">Clique em "Novo Pedido" para solicitar equipamentos</div>
+    <div style="flex:1;display:flex;align-items:center;justify-content:center">
+      <div style="text-align:center">
+        <div style="font-size:56px;margin-bottom:16px">🛒</div>
+        <div style="font-size:16px;font-weight:500;margin-bottom:8px">Nenhum pedido encontrado</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:24px">Clique em "Novo Pedido" para solicitar equipamentos</div>
+        <button class="btn btn-primary" onclick="pedidoForm={tipo:'nova_aquisicao',motivo:'',urgencia:'Normal',prazo:'',itens:[{descricao:'',quantidade:1}]};showPedidoModal=true;render()">+ Novo Pedido</button>
+      </div>
     </div>`:`
 
-    <div style="display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;flex-direction:column;gap:10px">
       ${myPedidos.map(p=>{
-        const statusColor = p.status==='Aguardando'?'var(--yellow)':p.status==='Aprovado'?'var(--green)':p.status==='Recusado'?'var(--red)':'var(--text-muted)';
-        const statusBg   = p.status==='Aguardando'?'rgba(255,196,0,.1)':p.status==='Aprovado'?'rgba(0,230,118,.1)':p.status==='Recusado'?'rgba(255,61,87,.1)':'rgba(100,100,100,.1)';
-        const urgColor   = p.urgencia==='Alta'?'var(--red)':p.urgencia==='Média'?'var(--yellow)':'var(--text-muted)';
-        const totalItens = (p.itens||[]).reduce((s,i)=>s+Number(i.quantidade||0),0);
-        return `<div style="background:var(--bg3);border:1px solid rgba(202,157,74,.1);border-radius:10px;padding:16px 20px;cursor:pointer;transition:all .2s" onclick="viewPedidoId='${p.id}';render()" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='rgba(202,157,74,.1)'">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px">
+        const sColor = {Aguardando:'var(--yellow)',Aprovado:'var(--green)',Recusado:'var(--red)','Em Análise':'var(--accent)','Entregue':'#a78bfa','Cancelado':'var(--text-muted)'}[p.status]||'var(--text-muted)';
+        const sBg    = {Aguardando:'rgba(255,196,0,.08)',Aprovado:'rgba(0,230,118,.08)',Recusado:'rgba(255,61,87,.08)','Em Análise':'rgba(202,157,74,.08)','Entregue':'rgba(167,139,250,.08)','Cancelado':'rgba(100,100,100,.06)'}[p.status]||'';
+        const uColor = p.urgencia==='Alta'||p.urgencia==='Urgente'?'var(--red)':p.urgencia==='Média'?'var(--yellow)':'var(--text-muted)';
+        const total  = (p.itens||[]).reduce((s,i)=>s+Number(i.quantidade||0),0);
+        const timeline = p.timeline||[];
+        const last = timeline[timeline.length-1];
+        return `<div style="background:var(--bg3);border:1px solid rgba(202,157,74,.1);border-radius:10px;overflow:hidden;cursor:pointer;transition:border-color .2s" onclick="viewPedidoId='${p.id}';render()" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='rgba(202,157,74,.1)'">
+          <div style="padding:16px 20px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
             <div style="flex:1;min-width:0">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
-                <span style="font-size:10px;font-family:monospace;color:var(--accent)">${p.id.substring(0,12).toUpperCase()}</span>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+                <span style="font-size:10px;font-family:monospace;color:var(--accent);font-weight:600">#${p.id.slice(-8).toUpperCase()}</span>
                 <span style="font-size:11px;background:rgba(202,157,74,.1);color:var(--accent);padding:2px 8px;border-radius:10px">${p.tipo==='nova_aquisicao'?'Nova Aquisição':p.tipo==='reposicao'?'Reposição':'Troca'}</span>
-                <span style="font-size:11px;color:${urgColor}">● ${p.urgencia}</span>
+                <span style="font-size:11px;color:${uColor};font-weight:500">⚡ ${p.urgencia}</span>
               </div>
               <div style="font-size:14px;font-weight:500;color:var(--text);margin-bottom:4px">${p.motivo}</div>
-              <div style="font-size:11px;color:var(--text-muted)">${p.solicitante_nome||'—'} · ${new Date(p.created_at).toLocaleDateString('pt-BR')} ${p.prazo?'· Prazo: '+new Date(p.prazo+'T12:00:00').toLocaleDateString('pt-BR'):''}</div>
+              <div style="font-size:11px;color:var(--text-muted)">
+                👤 ${p.solicitante_nome||'—'} · 📅 ${new Date(p.created_at).toLocaleDateString('pt-BR')}
+                ${p.prazo?` · 🗓 Prazo: ${new Date(p.prazo+'T12:00:00').toLocaleDateString('pt-BR')}`:''}
+              </div>
             </div>
             <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
-              <span style="background:${statusBg};color:${statusColor};border:1px solid ${statusColor};padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500">${p.status}</span>
-              <span style="font-size:11px;color:var(--text-muted)">${(p.itens||[]).length} item(ns) · ${totalItens} un.</span>
+              <span style="background:${sBg};color:${sColor};border:1px solid ${sColor};padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600">${p.status}</span>
+              <span style="font-size:11px;color:var(--text-muted)">${(p.itens||[]).length} item(ns) · ${total} un.</span>
             </div>
           </div>
-          ${p.obs_admin?`<div style="font-size:12px;background:rgba(0,0,0,.2);border-radius:6px;padding:6px 10px;color:var(--text-muted)">💬 Admin: ${p.obs_admin}</div>`:''}
+          ${last?`<div style="padding:8px 20px;background:rgba(0,0,0,.15);border-top:1px solid rgba(202,157,74,.06);font-size:11px;color:var(--text-muted)">
+            Última atualização: <strong style="color:var(--text-dim)">${last.acao}</strong> por ${last.usuario} · ${new Date(last.data).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
+          </div>`:''}
         </div>`;
       }).join('')}
     </div>`}
   </div>`;
 }
+
 
 function renderPedidoModal(){
   const tipos = [{v:'nova_aquisicao',l:'Nova Aquisição'},{v:'reposicao',l:'Reposição'},{v:'troca',l:'Troca'}];
@@ -3948,29 +3968,33 @@ function renderPedidoModal(){
 function renderViewPedido(){
   const p = pedidos.find(x=>x.id===viewPedidoId); if(!p) return '';
   const er = effRole();
-  const statusColor = p.status==='Aguardando'?'var(--yellow)':p.status==='Aprovado'?'var(--green)':p.status==='Recusado'?'var(--red)':'var(--text-muted)';
-  const urgColor    = p.urgencia==='Alta'||p.urgencia==='Urgente'?'var(--red)':p.urgencia==='Média'?'var(--yellow)':'var(--text-muted)';
+  const sColor = {Aguardando:'var(--yellow)',Aprovado:'var(--green)',Recusado:'var(--red)','Em Análise':'var(--accent)','Entregue':'#a78bfa','Cancelado':'var(--text-muted)'}[p.status]||'var(--text-muted)';
+  const uColor = p.urgencia==='Alta'||p.urgencia==='Urgente'?'var(--red)':p.urgencia==='Média'?'var(--yellow)':'var(--text-muted)';
+  const timeline = p.timeline||[];
+
   return `<div class="modal-overlay" onclick="if(event.target===this){viewPedidoId=null;render()}">
-  <div class="modal" style="max-width:600px">
+  <div class="modal" style="max-width:660px">
     <div class="modal-head">
       <div>
-        <div style="font-size:10px;color:var(--accent);font-family:monospace;margin-bottom:2px">${p.id.substring(0,12).toUpperCase()}</div>
+        <div style="font-size:10px;color:var(--accent);font-family:monospace;font-weight:600;margin-bottom:2px">#${p.id.slice(-8).toUpperCase()}</div>
         <div class="modal-title">Pedido de Compras</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
-        <span style="color:${statusColor};border:1px solid ${statusColor};padding:3px 10px;border-radius:20px;font-size:11px">${p.status}</span>
+        <span style="color:${sColor};border:1px solid ${sColor};padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600">${p.status}</span>
         <button class="icon-btn" onclick="viewPedidoId=null;render()">${IC.x}</button>
       </div>
     </div>
-    <div class="modal-body" style="max-height:65vh;overflow-y:auto">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+    <div class="modal-body" style="max-height:72vh;overflow-y:auto">
+
+      <!-- Info grid -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
         <div style="background:var(--bg4);border-radius:8px;padding:12px">
           <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Tipo</div>
           <div style="font-size:13px;font-weight:500">${p.tipo==='nova_aquisicao'?'Nova Aquisição':p.tipo==='reposicao'?'Reposição':'Troca'}</div>
         </div>
         <div style="background:var(--bg4);border-radius:8px;padding:12px">
           <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Urgência</div>
-          <div style="font-size:13px;font-weight:500;color:${urgColor}">${p.urgencia}</div>
+          <div style="font-size:13px;font-weight:500;color:${uColor}">${p.urgencia}</div>
         </div>
         <div style="background:var(--bg4);border-radius:8px;padding:12px">
           <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Solicitante</div>
@@ -3981,13 +4005,19 @@ function renderViewPedido(){
           <div style="font-size:13px">${p.prazo?new Date(p.prazo+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}):'Não informado'}</div>
         </div>
       </div>
+
+      <!-- Motivo -->
       <div style="background:var(--bg4);border-radius:8px;padding:12px;margin-bottom:16px">
         <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Motivo / Justificativa</div>
-        <div style="font-size:13px;line-height:1.6;color:var(--text)">${p.motivo}</div>
+        <div style="font-size:13px;line-height:1.6">${p.motivo}</div>
       </div>
+
       <!-- Itens -->
       <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:8px;overflow:hidden;margin-bottom:16px">
-        <div style="padding:10px 14px;border-bottom:1px solid rgba(202,157,74,.1);font-size:12px;font-weight:500">Lista de Itens</div>
+        <div style="padding:10px 14px;border-bottom:1px solid rgba(202,157,74,.1);font-size:12px;font-weight:500;display:flex;align-items:center;justify-content:space-between">
+          <span>Lista de Itens</span>
+          <span style="font-size:11px;color:var(--text-muted)">${(p.itens||[]).reduce((s,i)=>s+Number(i.quantidade||0),0)} unidades total</span>
+        </div>
         <table style="width:100%;border-collapse:collapse;font-size:13px">
           <thead><tr style="background:var(--bg4)">
             <th style="padding:8px 14px;text-align:left;font-size:10px;color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:1px">#</th>
@@ -4001,24 +4031,52 @@ function renderViewPedido(){
               <td style="padding:8px 14px;text-align:center;font-weight:600;color:var(--accent)">${item.quantidade}</td>
             </tr>`).join('')}
           </tbody>
-          <tfoot><tr style="background:var(--bg4);border-top:1px solid rgba(202,157,74,.1)">
-            <td colspan="2" style="padding:8px 14px;text-align:right;font-size:12px;color:var(--text-muted)">Total:</td>
-            <td style="padding:8px 14px;text-align:center;font-weight:700;color:var(--accent)">${(p.itens||[]).reduce((s,i)=>s+Number(i.quantidade||0),0)}</td>
-          </tfoot>
         </table>
       </div>
+
+      <!-- Admin obs -->
       ${p.obs_admin?`<div style="background:rgba(202,157,74,.07);border:1px solid rgba(202,157,74,.2);border-radius:8px;padding:12px;margin-bottom:16px">
-        <div style="font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Observação do Administrador</div>
+        <div style="font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">💬 Observação do Administrador</div>
         <div style="font-size:13px">${p.obs_admin}</div>
       </div>`:''}
+
+      <!-- Timeline / Histórico -->
+      <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:8px;overflow:hidden;margin-bottom:16px">
+        <div style="padding:10px 14px;border-bottom:1px solid rgba(202,157,74,.1);font-size:12px;font-weight:500">📋 Histórico do Pedido</div>
+        <div style="padding:14px 18px;display:flex;flex-direction:column;gap:0">
+          ${timeline.length===0?'<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:12px">Sem registros</div>':
+            timeline.map((ev,i)=>{
+              const isLast = i===timeline.length-1;
+              const evColor = {Criado:'var(--accent)','Em Análise':'var(--accent)',Aprovado:'var(--green)',Recusado:'var(--red)',Entregue:'#a78bfa',Cancelado:'var(--text-muted)'}[ev.acao]||'var(--text-muted)';
+              return `<div style="display:flex;gap:14px;position:relative">
+                <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0">
+                  <div style="width:10px;height:10px;border-radius:50%;background:${evColor};border:2px solid var(--bg3);margin-top:3px;flex-shrink:0"></div>
+                  ${!isLast?`<div style="width:2px;flex:1;min-height:20px;background:rgba(202,157,74,.15);margin:3px 0"></div>`:''}
+                </div>
+                <div style="flex:1;padding-bottom:${isLast?'0':'14px'}">
+                  <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+                    <span style="font-size:13px;font-weight:500;color:${evColor}">${ev.acao}</span>
+                    <span style="font-size:11px;color:var(--text-muted)">${new Date(ev.data).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
+                  </div>
+                  <div style="font-size:12px;color:var(--text-muted);margin-top:2px">por <strong style="color:var(--text-dim)">${ev.usuario}</strong></div>
+                  ${ev.obs?`<div style="font-size:12px;color:var(--text-dim);margin-top:4px;padding:6px 10px;background:rgba(0,0,0,.15);border-radius:6px">${ev.obs}</div>`:''}
+                </div>
+              </div>`;
+            }).join('')
+          }
+        </div>
+      </div>
+
       <!-- Admin actions -->
-      ${er==='admin'&&p.status==='Aguardando'?`<div style="background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:14px">
-        <div style="font-size:12px;font-weight:500;margin-bottom:10px">Responder Pedido</div>
+      ${er==='admin'&&p.status!=='Entregue'&&p.status!=='Cancelado'?`
+      <div style="background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:14px">
+        <div style="font-size:12px;font-weight:500;margin-bottom:10px">Atualizar Status</div>
         <textarea id="obs-admin-${p.id}" class="f-input" rows="2" placeholder="Observação (opcional)..." style="resize:none;margin-bottom:10px;font-size:13px"></textarea>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="updatePedidoStatus('${p.id}','Aprovado',document.getElementById('obs-admin-${p.id}').value)">✓ Aprovar</button>
-          <button class="btn btn-danger" style="flex:1;justify-content:center" onclick="updatePedidoStatus('${p.id}','Recusado',document.getElementById('obs-admin-${p.id}').value)">✗ Recusar</button>
-          <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="updatePedidoStatus('${p.id}','Em Análise',document.getElementById('obs-admin-${p.id}').value)">🔍 Em Análise</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${p.status!=='Em Análise'?`<button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center;min-width:100px" onclick="atualizarPedido('${p.id}','Em Análise',document.getElementById('obs-admin-${p.id}').value)">🔍 Em Análise</button>`:''}
+          ${p.status!=='Aprovado'?`<button class="btn btn-primary btn-sm" style="flex:1;justify-content:center;min-width:100px" onclick="atualizarPedido('${p.id}','Aprovado',document.getElementById('obs-admin-${p.id}').value)">✓ Aprovado</button>`:''}
+          ${p.status==='Aprovado'?`<button class="btn btn-sm" style="flex:1;justify-content:center;min-width:100px;background:rgba(167,139,250,.15);color:#a78bfa;border:1px solid #a78bfa" onclick="atualizarPedido('${p.id}','Entregue',document.getElementById('obs-admin-${p.id}').value)">📦 Entregue</button>`:''}
+          <button class="btn btn-danger btn-sm" style="flex:1;justify-content:center;min-width:100px" onclick="atualizarPedido('${p.id}','Recusado',document.getElementById('obs-admin-${p.id}').value)">✗ Recusar</button>
         </div>
       </div>`:''}
     </div>
@@ -4028,6 +4086,7 @@ function renderViewPedido(){
     </div>
   </div></div>`;
 }
+
 
 async function submitPedido(){
   // Collect form values
@@ -4040,6 +4099,7 @@ async function submitPedido(){
   const itensValidos = pedidoForm.itens.filter(i=>i.descricao.trim());
   if(!itensValidos.length) return showToast('⚠ Adicione ao menos um item');
 
+  const now = new Date().toISOString();
   const p = {
     id: 'PED-'+Date.now(),
     tipo, urgencia, motivo, prazo,
@@ -4048,8 +4108,9 @@ async function submitPedido(){
     solicitante_nome: currentUser.name,
     solicitante_email: currentUser.email,
     obs_admin: '',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
+    timeline: [{acao:'Criado', data:now, usuario:currentUser.name, obs:'Pedido criado por '+currentUser.name}],
+    created_at: now,
+    updated_at: now
   };
 
   const ok = await savePedido(p);
