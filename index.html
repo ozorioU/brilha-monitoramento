@@ -644,6 +644,10 @@ let USERS = [], tickets = [];
 let leafletMap = null, markersLayer = null, selectedCam = null;
 let openTicketId = null, showNewTicket = false, showImportModal = false;
 let camHistoryId = null, previewImg = null;
+let pedidos = [];
+let showPedidoModal = false;
+let pedidoForm = {tipo:'nova_aquisicao',motivo:'',urgencia:'Normal',prazo:'',itens:[{descricao:'',quantidade:1}]};
+let viewPedidoId = null;
 let camNoteInput = {};
 let showUserModal = false, editUserId = null, deleteUserId = null, showChangePassword = false, deleteTicketId = null;
 let campoSubPage = 'home'; // 'home' | 'troca-onu' | 'troca-onu-form' | 'troca-onu-lista' | 'atualizacao' // 'home' | 'troca-onu' | 'troca-onu-form' | 'troca-onu-lista'
@@ -698,6 +702,7 @@ const IC={
   ticket:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5v2M15 11v2M15 17v2M5 5h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V7a2 2 0 0 1 2-2z"/></svg>`,
   users:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
   key:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>`,
+  pedido:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
   campo:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
   chart:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>`,
   logout:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
@@ -721,6 +726,7 @@ async function init(){
   loadChartData();
   await loadManualStats();
   await loadOnuRegistros();
+  await loadPedidos();
   await loadAtualizacoes();
   // Auto-fill and auto-login if remember me was checked
   try{
@@ -866,10 +872,11 @@ function renderShell(){
   const navItems=[
     {id:'dashboard',label:'Dashboard',icon:'dash'},
     {id:'tickets',label:'Chamados',icon:'ticket',badge:er!=='client'?openTks().length:0},
+    {id:'pedidos',label:'Pedido de Compras',icon:'pedido',badge:er==='admin'?pedidos.filter(p=>p.status==='Aguardando').length:0},
     ...(er==='admin'||er==='tech'?[{id:'campo',label:'Técnico / Campo',icon:'campo',section:'Campo'}]:[]),
     ...(er==='admin'?[{id:'users',label:'Usuários',icon:'users'}]:[]),
   ];
-  const titles={dashboard:'Dashboard',tickets:'Chamados',users:'Usuários',campo:'Técnico / Campo'};
+  const titles={dashboard:'Dashboard',tickets:'Chamados',pedidos:'Pedido de Compras',users:'Usuários',campo:'Técnico / Campo'};
   return `<div class="app">
     <div class="mob-overlay" id="mob-overlay" onclick="toggleMobMenu()"></div>
     <aside class="sidebar" id="main-sidebar">
@@ -936,6 +943,8 @@ function renderShell(){
   ${showChangePassword?renderChangePasswordModal():''}
   ${deleteTicketId?renderDeleteTicketConfirm():''}
   ${atuHistModal?renderAtuHistModal():''}
+  ${showPedidoModal?renderPedidoModal():''}
+  ${viewPedidoId?renderViewPedido():''}
   ${showEditStats?renderEditStatsModal():''}`;
 }
 
@@ -2875,6 +2884,7 @@ function renderTrocaOnu(){
 async function reloadOnuRegistros(){
   showToast('🔄 Atualizando registros...');
   await loadOnuRegistros();
+  await loadPedidos();
   await loadAtualizacoes();
   showToast('✓ Registros atualizados!');
   render();
@@ -3766,6 +3776,288 @@ async function salvarNotaCam(camId){
   buildCamHistory();
   showModal(renderCamHistoryModal());
 }
+
+// ── PEDIDOS DE COMPRAS ────────────────────────────────────────────────────────
+async function loadPedidos(){
+  try{
+    const data = await sbGet('pedidos_compra','select=*&order=created_at.desc');
+    pedidos = data || [];
+  } catch(e){ pedidos = []; }
+}
+
+async function savePedido(p){
+  try{
+    await sbPost('pedidos_compra', p);
+    return true;
+  } catch(e){
+    console.error('savePedido error:', e);
+    return false;
+  }
+}
+
+async function updatePedidoStatus(id, status, obs=''){
+  try{
+    await sbPatch('pedidos_compra','id=eq.'+id,{
+      status, obs_admin: obs,
+      updated_at: new Date().toISOString()
+    });
+    pedidos = pedidos.map(p=>p.id===id?{...p,status,obs_admin:obs,updated_at:new Date().toISOString()}:p);
+    showToast('✓ Status atualizado');
+    render();
+  } catch(e){ showToast('⚠ Erro ao atualizar'); }
+}
+
+function addPedidoItem(){
+  pedidoForm.itens.push({descricao:'',quantidade:1});
+  render();
+}
+
+function removePedidoItem(i){
+  pedidoForm.itens.splice(i,1);
+  if(pedidoForm.itens.length===0) pedidoForm.itens=[{descricao:'',quantidade:1}];
+  render();
+}
+
+function renderPedidos(){
+  const er = effRole();
+  const myPedidos = er==='admin' ? pedidos : pedidos.filter(p=>p.solicitante_email===currentUser.email);
+  const badge = pedidos.filter(p=>p.status==='Aguardando').length;
+
+  return `<div style="max-width:900px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:18px;font-weight:500">Pedidos de Compras</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Solicitação de equipamentos para nova aquisição, reposição ou troca</div>
+      </div>
+      <button class="btn btn-primary" onclick="pedidoForm={tipo:'nova_aquisicao',motivo:'',urgencia:'Normal',prazo:'',itens:[{descricao:'',quantidade:1}]};showPedidoModal=true;render()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Novo Pedido
+      </button>
+    </div>
+
+    ${myPedidos.length===0?`
+    <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:12px;padding:60px;text-align:center">
+      <div style="font-size:44px;margin-bottom:14px">🛒</div>
+      <div style="font-size:15px;font-weight:500;margin-bottom:8px">Nenhum pedido encontrado</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px">Clique em "Novo Pedido" para solicitar equipamentos</div>
+    </div>`:`
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      ${myPedidos.map(p=>{
+        const statusColor = p.status==='Aguardando'?'var(--yellow)':p.status==='Aprovado'?'var(--green)':p.status==='Recusado'?'var(--red)':'var(--text-muted)';
+        const statusBg   = p.status==='Aguardando'?'rgba(255,196,0,.1)':p.status==='Aprovado'?'rgba(0,230,118,.1)':p.status==='Recusado'?'rgba(255,61,87,.1)':'rgba(100,100,100,.1)';
+        const urgColor   = p.urgencia==='Alta'?'var(--red)':p.urgencia==='Média'?'var(--yellow)':'var(--text-muted)';
+        const totalItens = (p.itens||[]).reduce((s,i)=>s+Number(i.quantidade||0),0);
+        return `<div style="background:var(--bg3);border:1px solid rgba(202,157,74,.1);border-radius:10px;padding:16px 20px;cursor:pointer;transition:all .2s" onclick="viewPedidoId='${p.id}';render()" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='rgba(202,157,74,.1)'">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px">
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+                <span style="font-size:10px;font-family:monospace;color:var(--accent)">${p.id.substring(0,12).toUpperCase()}</span>
+                <span style="font-size:11px;background:rgba(202,157,74,.1);color:var(--accent);padding:2px 8px;border-radius:10px">${p.tipo==='nova_aquisicao'?'Nova Aquisição':p.tipo==='reposicao'?'Reposição':'Troca'}</span>
+                <span style="font-size:11px;color:${urgColor}">● ${p.urgencia}</span>
+              </div>
+              <div style="font-size:14px;font-weight:500;color:var(--text);margin-bottom:4px">${p.motivo}</div>
+              <div style="font-size:11px;color:var(--text-muted)">${p.solicitante_nome||'—'} · ${new Date(p.created_at).toLocaleDateString('pt-BR')} ${p.prazo?'· Prazo: '+new Date(p.prazo+'T12:00:00').toLocaleDateString('pt-BR'):''}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+              <span style="background:${statusBg};color:${statusColor};border:1px solid ${statusColor};padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500">${p.status}</span>
+              <span style="font-size:11px;color:var(--text-muted)">${(p.itens||[]).length} item(ns) · ${totalItens} un.</span>
+            </div>
+          </div>
+          ${p.obs_admin?`<div style="font-size:12px;background:rgba(0,0,0,.2);border-radius:6px;padding:6px 10px;color:var(--text-muted)">💬 Admin: ${p.obs_admin}</div>`:''}
+        </div>`;
+      }).join('')}
+    </div>`}
+  </div>`;
+}
+
+function renderPedidoModal(){
+  const tipos = [{v:'nova_aquisicao',l:'Nova Aquisição'},{v:'reposicao',l:'Reposição'},{v:'troca',l:'Troca'}];
+  const urgencias = ['Baixa','Normal','Alta','Urgente'];
+  return `<div class="modal-overlay" onclick="if(event.target===this){showPedidoModal=false;render()}">
+  <div class="modal" style="max-width:620px">
+    <div class="modal-head">
+      <div class="modal-title">🛒 Novo Pedido de Compras</div>
+      <button class="icon-btn" onclick="showPedidoModal=false;render()">${IC.x}</button>
+    </div>
+    <div class="modal-body" style="max-height:70vh;overflow-y:auto">
+      <div class="form-grid">
+        <div class="f-group">
+          <label class="f-label">Tipo de Solicitação <span style="color:var(--red)">*</span></label>
+          <select class="f-input" id="pd-tipo">
+            ${tipos.map(t=>`<option value="${t.v}" ${pedidoForm.tipo===t.v?'selected':''}>${t.l}</option>`).join('')}
+          </select>
+        </div>
+        <div class="f-group">
+          <label class="f-label">Urgência <span style="color:var(--red)">*</span></label>
+          <select class="f-input" id="pd-urgencia">
+            ${urgencias.map(u=>`<option value="${u}" ${pedidoForm.urgencia===u?'selected':''}>${u}</option>`).join('')}
+          </select>
+        </div>
+        <div class="f-group fg-full">
+          <label class="f-label">Motivo / Justificativa <span style="color:var(--red)">*</span></label>
+          <textarea class="f-input" id="pd-motivo" rows="3" placeholder="Descreva o motivo da solicitação..." style="resize:none">${pedidoForm.motivo}</textarea>
+        </div>
+        <div class="f-group">
+          <label class="f-label">Prazo Necessário</label>
+          <input class="f-input" id="pd-prazo" type="date" value="${pedidoForm.prazo}"/>
+        </div>
+      </div>
+
+      <!-- Itens -->
+      <div style="margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <label class="f-label" style="margin:0">Lista de Itens <span style="color:var(--red)">*</span></label>
+          <button class="btn btn-ghost btn-sm" onclick="addPedidoItem()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Adicionar Item
+          </button>
+        </div>
+        <div style="background:var(--bg4);border-radius:8px;overflow:hidden;border:1px solid var(--border)">
+          <div style="display:grid;grid-template-columns:1fr 100px 36px;gap:0;background:var(--bg4);padding:8px 12px;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border)">
+            <span>Descrição do Item</span><span style="text-align:center">Qtd</span><span></span>
+          </div>
+          ${pedidoForm.itens.map((item,i)=>`
+          <div style="display:grid;grid-template-columns:1fr 100px 36px;gap:6px;padding:8px 12px;border-bottom:1px solid rgba(202,157,74,.06);align-items:center">
+            <input class="f-input" placeholder="Ex: Câmera Hikvision DS-2CD2T47G2..." style="padding:6px 10px;font-size:13px"
+              value="${item.descricao}"
+              onchange="pedidoForm.itens[${i}].descricao=this.value"
+            />
+            <input class="f-input" type="number" min="1" style="padding:6px 10px;font-size:13px;text-align:center"
+              value="${item.quantidade}"
+              onchange="pedidoForm.itens[${i}].quantidade=parseInt(this.value)||1"
+            />
+            <button class="icon-btn" style="color:var(--red);padding:4px" onclick="removePedidoItem(${i})" title="Remover item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>`).join('')}
+          <div style="padding:8px 12px;font-size:12px;color:var(--text-muted);text-align:right">
+            Total: <strong style="color:var(--accent)">${pedidoForm.itens.reduce((s,i)=>s+Number(i.quantidade||0),0)} unidades</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot" style="justify-content:space-between">
+      <button class="btn btn-ghost" onclick="showPedidoModal=false;render()">Cancelar</button>
+      <button class="btn btn-primary" onclick="submitPedido()">✓ Enviar Pedido</button>
+    </div>
+  </div></div>`;
+}
+
+function renderViewPedido(){
+  const p = pedidos.find(x=>x.id===viewPedidoId); if(!p) return '';
+  const er = effRole();
+  const statusColor = p.status==='Aguardando'?'var(--yellow)':p.status==='Aprovado'?'var(--green)':p.status==='Recusado'?'var(--red)':'var(--text-muted)';
+  const urgColor    = p.urgencia==='Alta'||p.urgencia==='Urgente'?'var(--red)':p.urgencia==='Média'?'var(--yellow)':'var(--text-muted)';
+  return `<div class="modal-overlay" onclick="if(event.target===this){viewPedidoId=null;render()}">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-head">
+      <div>
+        <div style="font-size:10px;color:var(--accent);font-family:monospace;margin-bottom:2px">${p.id.substring(0,12).toUpperCase()}</div>
+        <div class="modal-title">Pedido de Compras</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span style="color:${statusColor};border:1px solid ${statusColor};padding:3px 10px;border-radius:20px;font-size:11px">${p.status}</span>
+        <button class="icon-btn" onclick="viewPedidoId=null;render()">${IC.x}</button>
+      </div>
+    </div>
+    <div class="modal-body" style="max-height:65vh;overflow-y:auto">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div style="background:var(--bg4);border-radius:8px;padding:12px">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Tipo</div>
+          <div style="font-size:13px;font-weight:500">${p.tipo==='nova_aquisicao'?'Nova Aquisição':p.tipo==='reposicao'?'Reposição':'Troca'}</div>
+        </div>
+        <div style="background:var(--bg4);border-radius:8px;padding:12px">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Urgência</div>
+          <div style="font-size:13px;font-weight:500;color:${urgColor}">${p.urgencia}</div>
+        </div>
+        <div style="background:var(--bg4);border-radius:8px;padding:12px">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Solicitante</div>
+          <div style="font-size:13px">${p.solicitante_nome||'—'}</div>
+        </div>
+        <div style="background:var(--bg4);border-radius:8px;padding:12px">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Prazo</div>
+          <div style="font-size:13px">${p.prazo?new Date(p.prazo+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}):'Não informado'}</div>
+        </div>
+      </div>
+      <div style="background:var(--bg4);border-radius:8px;padding:12px;margin-bottom:16px">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Motivo / Justificativa</div>
+        <div style="font-size:13px;line-height:1.6;color:var(--text)">${p.motivo}</div>
+      </div>
+      <!-- Itens -->
+      <div style="background:var(--bg3);border:1px solid rgba(202,157,74,.12);border-radius:8px;overflow:hidden;margin-bottom:16px">
+        <div style="padding:10px 14px;border-bottom:1px solid rgba(202,157,74,.1);font-size:12px;font-weight:500">Lista de Itens</div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="background:var(--bg4)">
+            <th style="padding:8px 14px;text-align:left;font-size:10px;color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:1px">#</th>
+            <th style="padding:8px 14px;text-align:left;font-size:10px;color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:1px">Descrição</th>
+            <th style="padding:8px 14px;text-align:center;font-size:10px;color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:1px">Qtd</th>
+          </tr></thead>
+          <tbody>
+            ${(p.itens||[]).map((item,i)=>`<tr style="border-top:1px solid rgba(202,157,74,.06)">
+              <td style="padding:8px 14px;color:var(--text-muted);font-size:11px">${i+1}</td>
+              <td style="padding:8px 14px">${item.descricao}</td>
+              <td style="padding:8px 14px;text-align:center;font-weight:600;color:var(--accent)">${item.quantidade}</td>
+            </tr>`).join('')}
+          </tbody>
+          <tfoot><tr style="background:var(--bg4);border-top:1px solid rgba(202,157,74,.1)">
+            <td colspan="2" style="padding:8px 14px;text-align:right;font-size:12px;color:var(--text-muted)">Total:</td>
+            <td style="padding:8px 14px;text-align:center;font-weight:700;color:var(--accent)">${(p.itens||[]).reduce((s,i)=>s+Number(i.quantidade||0),0)}</td>
+          </tfoot>
+        </table>
+      </div>
+      ${p.obs_admin?`<div style="background:rgba(202,157,74,.07);border:1px solid rgba(202,157,74,.2);border-radius:8px;padding:12px;margin-bottom:16px">
+        <div style="font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Observação do Administrador</div>
+        <div style="font-size:13px">${p.obs_admin}</div>
+      </div>`:''}
+      <!-- Admin actions -->
+      ${er==='admin'&&p.status==='Aguardando'?`<div style="background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:14px">
+        <div style="font-size:12px;font-weight:500;margin-bottom:10px">Responder Pedido</div>
+        <textarea id="obs-admin-${p.id}" class="f-input" rows="2" placeholder="Observação (opcional)..." style="resize:none;margin-bottom:10px;font-size:13px"></textarea>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="updatePedidoStatus('${p.id}','Aprovado',document.getElementById('obs-admin-${p.id}').value)">✓ Aprovar</button>
+          <button class="btn btn-danger" style="flex:1;justify-content:center" onclick="updatePedidoStatus('${p.id}','Recusado',document.getElementById('obs-admin-${p.id}').value)">✗ Recusar</button>
+          <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="updatePedidoStatus('${p.id}','Em Análise',document.getElementById('obs-admin-${p.id}').value)">🔍 Em Análise</button>
+        </div>
+      </div>`:''}
+    </div>
+    <div class="modal-foot" style="justify-content:space-between">
+      <button class="btn btn-ghost" onclick="viewPedidoId=null;render()">Fechar</button>
+      <div style="font-size:11px;color:var(--text-muted)">Criado em ${new Date(p.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+    </div>
+  </div></div>`;
+}
+
+async function submitPedido(){
+  // Collect form values
+  const tipo    = document.getElementById('pd-tipo')?.value || pedidoForm.tipo;
+  const urgencia= document.getElementById('pd-urgencia')?.value || pedidoForm.urgencia;
+  const motivo  = document.getElementById('pd-motivo')?.value?.trim() || pedidoForm.motivo;
+  const prazo   = document.getElementById('pd-prazo')?.value || pedidoForm.prazo;
+
+  if(!motivo) return showToast('⚠ Informe o motivo da solicitação');
+  const itensValidos = pedidoForm.itens.filter(i=>i.descricao.trim());
+  if(!itensValidos.length) return showToast('⚠ Adicione ao menos um item');
+
+  const p = {
+    id: 'PED-'+Date.now(),
+    tipo, urgencia, motivo, prazo,
+    itens: itensValidos,
+    status: 'Aguardando',
+    solicitante_nome: currentUser.name,
+    solicitante_email: currentUser.email,
+    obs_admin: '',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  const ok = await savePedido(p);
+  pedidos = [p, ...pedidos];
+  showPedidoModal = false;
+  showToast(ok ? '✓ Pedido enviado com sucesso!' : '✓ Pedido salvo localmente');
+  render();
+}
+
 // ── BOOT ─────────────────────────────────────────────────────────────────────
 init();
 </script>
