@@ -827,6 +827,18 @@ function doLogout(){ currentUser=null; leafletMap=null; render(); }
 function render(){
   document.getElementById('root').innerHTML = currentUser ? renderShell() : renderLogin();
   bindKeys();
+  if(page==='pedidos'){
+    // Auto-refresh pedidos status from DB (SIR updates it)
+    clearTimeout(window._pedidosRefresh);
+    window._pedidosRefresh = setTimeout(async()=>{
+      if(page==='pedidos'){
+        try{
+          const fresh = await sbGet('pedidos_compra','select=*&order=created_at.desc');
+          if(fresh){ pedidos=fresh; render(); }
+        }catch(e){}
+      }
+    }, 30000); // refresh every 30s
+  }
   if(page==='dashboard'){
     requestAnimationFrame(initMap);
   } else if(page==='campo'&&campoSubPage==='troca-onu-form'){
@@ -3898,7 +3910,7 @@ function renderPedidoModal(){
   return `<div class="modal-overlay" onclick="if(event.target===this){showPedidoModal=false;render()}">
   <div class="modal" style="max-width:620px">
     <div class="modal-head">
-      <div class="modal-title">🛒 Novo Pedido de Compras</div>
+      <div class="modal-title">${pedidoForm._editId?"✏️ Editar Pedido":"🛒 Novo Pedido de Compras"}</div>
       <button class="icon-btn" onclick="showPedidoModal=false;render()">${IC.x}</button>
     </div>
     <div class="modal-body" style="max-height:70vh;overflow-y:auto">
@@ -3960,7 +3972,7 @@ function renderPedidoModal(){
     </div>
     <div class="modal-foot" style="justify-content:space-between">
       <button class="btn btn-ghost" onclick="showPedidoModal=false;render()">Cancelar</button>
-      <button class="btn btn-primary" onclick="submitPedido()">✓ Enviar Pedido</button>
+      <button class="btn btn-primary" onclick="pedidoForm._editId?salvarEdicaoPedido(pedidoForm._editId):submitPedido()">${pedidoForm._editId?"✓ Salvar Alterações":"✓ Enviar Pedido"}</button>
     </div>
   </div></div>`;
 }
@@ -4085,8 +4097,17 @@ function renderViewPedido(){
         <button class="btn btn-ghost" onclick="viewPedidoId=null;render()">Fechar</button>
         ${er==='admin'?`<button class="btn btn-danger btn-sm" onclick="excluirPedido('${p.id}')">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-          Excluir Pedido
+          Excluir
         </button>`:''}
+        ${p.status==='Aguardando'&&p.solicitante_email===currentUser.email?`
+          <button class="btn btn-ghost btn-sm" onclick="editarPedido('${p.id}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Editar
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="excluirPedido('${p.id}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            Excluir
+          </button>`:''}
       </div>
       <div style="font-size:11px;color:var(--text-muted)">Criado em ${new Date(p.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
     </div>
@@ -4137,6 +4158,44 @@ async function excluirPedido(id){
   }
   pedidos = pedidos.filter(p=>p.id!==id);
   viewPedidoId = null;
+  render();
+}
+
+function editarPedido(id){
+  const p = pedidos.find(x=>x.id===id); if(!p) return;
+  // Load into form for editing
+  pedidoForm = {
+    _editId: id,
+    tipo: p.tipo,
+    motivo: p.motivo,
+    urgencia: p.urgencia,
+    prazo: p.prazo||'',
+    itens: JSON.parse(JSON.stringify(p.itens||[{descricao:'',quantidade:1}]))
+  };
+  viewPedidoId = null;
+  showPedidoModal = true;
+  render();
+}
+
+async function salvarEdicaoPedido(id){
+  const tipo     = document.getElementById('pd-tipo')?.value || pedidoForm.tipo;
+  const urgencia = document.getElementById('pd-urgencia')?.value || pedidoForm.urgencia;
+  const motivo   = document.getElementById('pd-motivo')?.value?.trim() || pedidoForm.motivo;
+  const prazo    = document.getElementById('pd-prazo')?.value || pedidoForm.prazo;
+
+  if(!motivo) return showToast('⚠ Informe o motivo');
+  const itensValidos = pedidoForm.itens.filter(i=>i.descricao.trim());
+  if(!itensValidos.length) return showToast('⚠ Adicione ao menos um item');
+
+  const upd = {tipo, urgencia, motivo, prazo, itens:itensValidos, updated_at:new Date().toISOString()};
+  try{
+    await sbPatch('pedidos_compra','id=eq.'+id, upd);
+    showToast('✓ Pedido atualizado!');
+  } catch(e){ showToast('✓ Atualizado localmente'); }
+
+  pedidos = pedidos.map(p=>p.id===id?{...p,...upd}:p);
+  pedidoForm = {tipo:'nova_aquisicao',motivo:'',urgencia:'Normal',prazo:'',itens:[{descricao:'',quantidade:1}]};
+  showPedidoModal = false;
   render();
 }
 // ── BOOT ─────────────────────────────────────────────────────────────────────
