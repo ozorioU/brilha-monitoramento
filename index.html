@@ -821,12 +821,12 @@ function doLogout(){ currentUser=null; leafletMap=null; render(); }
 function render(){
   document.getElementById('root').innerHTML = currentUser ? renderShell() : renderLogin();
   bindKeys();
-  if(page==='dashboard'||page==='cameras'){
+  if(page==='dashboard'){
     requestAnimationFrame(initMap);
   } else if(page==='campo'&&campoSubPage==='troca-onu-form'){
     requestAnimationFrame(initOnuMiniMap);
   }
-  if(page==='dashboard'||page==='cameras'){
+  if(page==='dashboard'){
     window.onresize = ()=>{ if(leafletMap) leafletMap.invalidateSize({animate:false}); };
     // Fix map on content scroll (Leaflet doesn't auto-detect container scroll)
     const contentEl = document.querySelector('.content');
@@ -865,12 +865,11 @@ function renderShell(){
   const er=effRole();
   const navItems=[
     {id:'dashboard',label:'Dashboard',icon:'dash'},
-    {id:'cameras',label:'Câmeras',icon:'cam'},
     {id:'tickets',label:'Chamados',icon:'ticket',badge:er!=='client'?openTks().length:0},
     ...(er==='admin'||er==='tech'?[{id:'campo',label:'Técnico / Campo',icon:'campo',section:'Campo'}]:[]),
-    ...(er==='admin'?[{id:'users',label:'Usuários',icon:'users'},{id:'grafico',label:'Gráfico',icon:'chart'}]:[]),
+    ...(er==='admin'?[{id:'users',label:'Usuários',icon:'users'}]:[]),
   ];
-  const titles={dashboard:'Dashboard',cameras:'Câmeras',tickets:'Chamados',users:'Usuários',grafico:'Gráfico',campo:'Técnico / Campo'};
+  const titles={dashboard:'Dashboard',tickets:'Chamados',users:'Usuários',campo:'Técnico / Campo'};
   return `<div class="app">
     <div class="mob-overlay" id="mob-overlay" onclick="toggleMobMenu()"></div>
     <aside class="sidebar" id="main-sidebar">
@@ -914,7 +913,6 @@ function renderShell(){
         </div>
         <div class="topbar-right">
           ${currentUser.role==='admin'&&viewAs==='admin'?`
-          ${page==='cameras'?`<button class="btn btn-ghost btn-sm" onclick="forceSyncCameraStatus()" title="Forçar sincronização de status no banco" style="color:var(--green);border-color:var(--green)">🔄 Sync Status</button>`:''}
           <button class="btn btn-ghost btn-sm" onclick="openImportModal()" style="border-color:var(--accent);color:var(--accent);font-weight:700">⬆ Importar KMZ</button>`:''}
           ${currentUser.role==='admin'?`<div class="view-toggle">
             <button class="vt-btn${viewAs==='admin'?' active':''}" onclick="setView('admin')">${IC.settings} Admin</button>
